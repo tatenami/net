@@ -1,0 +1,106 @@
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>教育用計算機のページ</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+</head>
+<body>
+ 
+<center><h2>教育用計算機のページ</h2></center><br>
+
+<center><font color="red"><h2> 注意 <br>
+演習室・図書閲覧室は，いずれも飲食禁止です．<br>
+講義時間外における，演習室・図書閲覧室での席取り行為を禁止します．
+</h2></font></center><br>
+
+<hr>
+<h3 style="color: red">お願い</h3>
+<ul style="color: red">
+  <li>自習のときは，密閉・密集・密接を避けて，ご利用ください．</li>
+  <li>利用時は，「部屋の入り口を全開」「換気扇を回す」にて，ご利用ください．</li>
+  <li>最後の利用者は，帰宅前に「部屋の入り口を閉じる」「電気・エアコン・換気扇を止める」」をお願いします．</li>
+  <li>演習室利用後，食事等をする場合，退室後の手洗いを忘れないようにしてください．</li>
+</ul>
+<h3>おしらせ</h3>
+<ul>
+<li>2024.3.1 教育用計算機システムが新しくなりました．</li>
+<!--
+<li>2022.10.1 演習室等の自習利用を再開しました．利用時は「ドア全開」にしてください．
+  <ul>
+    <li>プログラミング演習室 (509室)</li>
+    <li>図書閲覧室 (310室)</li>
+  </ul></li>
+<li>2020.3.30 教育用計算機システムのソフトウェアを更新しました．
+  <ul><li>Firefox/Thunderbirdの起動時に ProfileManager を常に起動するようにしています．defaultを選択したまま，起動してください．</li></ul>
+</li>
+<li>2019.08.02 岡山大学公開講座のため，以下の期間は部屋・計算機ともに利用できません
+  <ul>
+    <li>プログラミング演習室 (509室) 2019年8月2日（金）14:30 ～ 3日（土）終日</li>
+    <li>図書閲覧室 (310室) 2019年8月2日（金）終日</li>
+  </ul></li>
+<li>2019.03.01 教育用計算機システムが新しくなりました．</li>
+<li>2019.02.26 教育用計算機システム更新のため，以下の期間は計算機が利用できません
+  <ul>
+    <li>プログラミング演習室 (509室) 2019年2月18日（月）～28日（木）</li>
+  </ul>
+</li>
+<li>2019.02.14 教育用計算機システム更新のため，以下の期間は計算機が利用できません
+  <ul>
+    <li><s>プログラミング演習室 (509室) 2019年2月18日（月）～22日（金）</s></li>
+    <li>図書閲覧室 (310室) 2019年2月18日（月）～19日（火）</li>
+  </ul>
+</li>
+-->
+</ul>
+<hr>
+
+<h3>情報系/情報コース関係のMoodle</h3>
+<ul>
+  <li><a href="https://moodle.el.okayama-u.ac.jp/course/view.php?id=122476">情報系学科 WEB掲示板</a>
+  <li><a href="https://moodle.el.okayama-u.ac.jp/course/view.php?id=177751">情報工学コース WEB掲示板</a>
+  <li><a href="https://moodle.el.okayama-u.ac.jp/course/view.php?id=177681">情電数デ系 WEB掲示板</a>
+  <li><a href="https://moodle.el.okayama-u.ac.jp/course/view.php?id=122535">工学部共通 WEB掲示板</a>
+</ul>
+
+<hr>
+<h3><A HREF="/prog/index.html" >実習/演習/実験 に関する情報</a></h3>
+<ul>
+  <li>工学基礎実験実習</li>
+  <li>プログラミング演習</li>
+  <li>システムプログラミング</li>
+  <li>情報工学実験A</li>
+  <li>情報工学実験B</li>
+  <li>情報工学実験C</li>
+</ul>
+
+<hr>
+<h3><a href="/info/edusys/">教育用計算機使用 リファレンスマニュアル</a></h3>
+<div style="font-weight: bold;">(抜粋)</div>
+<ul>
+  <li><a href="/info/edusys/">システムの概要</a></li>
+  <li><a href="/info/edusys/printer-ouonly.html">プリンタの使い方</a></li>
+  <li><a href="/info/tool_guide/emacs.html">Emacsの使い方</a></li>
+  <li><a href="/info/tool_guide/tex.html">LaTeXの使い方</a></li>
+  <li><a href="/info/edusys/linux-basic.html">Linux FAQ</a></li>
+</ul>
+<hr>
+<h3>学内リンク</h3>
+<ul>
+  <li><a href="https://www.eng.okayama-u.ac.jp/it/">岡山大学 工学部 情報系学科</a></li>
+  <li><a href="/student/index.html" >情報系学科/情報工学科 学部生LINK</a></li>
+  <li><s><a href="http://www.it.okayama-u.ac.jp/" >旧：情報工学科Webページ</a></s></li>
+</ul>
+<ul>
+  <li><a href="https://www.citm.okayama-u.ac.jp/citm/service/itsystem_all.html">情報統括センター提供情報システム・サービスポータル</a></li>
+  <li><a href="https://moodle.el.okayama-u.ac.jp/">Moodle</a></li>
+  <li><a href="https://mail.s.okayama-u.ac.jp/">岡大GMail</a></li>
+</ul>
+<hr>
+<div align="right">
+      <script language="JavaScript"><!--
+document.writeln(
+  '最終更新日 : '+document.lastModified
+);
+// --></script></div><br>
+</body>
+</html>
