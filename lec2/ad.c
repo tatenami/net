@@ -7,7 +7,6 @@
 #include <netdb.h>
 #include <string.h>
 #include <arpa/inet.h>
-#include <stdlib.h>
 
 #include "utils.h"
 
@@ -18,9 +17,16 @@ int main(int argc, char *argv[]) {
   int send_size, recv_size, wsize;
   struct addrinfo hints, *res;
   char *ip_addr;
-  int port;
+  int   port;
   char *hostname, *servname, *file_path;
   char recv_buf[BUF_SIZE], request[BUF_SIZE];
+  char *html_ptr = NULL;
+  int  finish_html = 0;
+
+  if (argc < 4) {
+    printf("Args not enough!\n");
+    return 1;
+  }
 
   hostname = argv[1];
   servname = argv[2];
@@ -79,6 +85,9 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
+
+  int html_flag = 0;
+
   while (1) {
     // レスポンスを受信
     recv_size = recv(sock, recv_buf, BUF_SIZE, 0);
@@ -95,14 +104,37 @@ int main(int argc, char *argv[]) {
       break;
     }
 
+    if ((html_ptr = strstr(recv_buf, "<html>")) != NULL) {
+      html_flag = 1;
+      recv_size = (int)(BUF_SIZE - (html_ptr - recv_buf));
+    } 
+    else if ((html_ptr = strstr(recv_buf, "</html>")) != NULL) {
+      recv_size = (int)(html_ptr - recv_buf + strlen("</html>"));
+      html_ptr = recv_buf;
+      finish_html = 1;
+    }
+    else {
+      recv_size = BUF_SIZE;
+      html_ptr = recv_buf;
+    }
+
+    printf("buf: %s", html_ptr);
+
     // レスポンス内容を出力用ファイルへ書き出し
-    wsize = write(fd, recv_buf, recv_size);
+    if (html_flag == 1) {
+      wsize = write(fd, html_ptr, recv_size);
+    }
+
     if (wsize < 0) {
       printf("write failed\n");
       freeaddrinfo(res);
       close(sock);
       close(fd);
       return 1;
+    }
+
+    if (finish_html) {
+      break;
     }
   }
 
