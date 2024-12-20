@@ -82,7 +82,7 @@ int main (int argc, char *argv[]) {
       }
 
       // バッファー中に ASCIIの[EXT] = 0x03 の転送終了の合図があれば終了
-      if (is_contain(recv_buf, recv_size, SIGNAL_END)) {
+      if (is_contain(recv_buf, recv_size, SIGNAL_END_MSG)) {
         printf("\nfinish sending to client!\n");
         printf("msg length: %d\n", str_len);
         break;

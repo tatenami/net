@@ -23,3 +23,13 @@ char* addr_ip(struct sockaddr_in *addr) {
   return inet_ntoa(addr->sin_addr);  
 }
 
+
+int is_contain(char *buf, int len, uint8_t ascii) {
+  for (int i = 0; i < len; i++) {
+    if (*buf == ascii) {
+      return 1;
+    }
+    buf++;
+  }
+  return -1;
+}

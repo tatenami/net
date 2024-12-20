@@ -81,8 +81,8 @@ int main (int argc, char *argv[]) {
         return 1;
       }
 
-      // バッファー中に ASCIIの[EXT] = 0x03 の転送終了の合図があれば終了
-      if (is_contain(recv_buf, recv_size, SIGNAL_END)) {
+      // バッファー最後尾の ASCIIの[EXT] = 0x03 を転送終了の合図とする
+      if (recv_buf[0] == 0x03) {
         printf("\nfinish sending to client!\n");
         printf("msg length: %d\n", str_len);
         break;
@@ -91,7 +91,7 @@ int main (int argc, char *argv[]) {
       str_len += strlen(recv_buf);
     }
 
-    sprintf(send_msg, "msg length: %d\n", str_len);
+    sprintf(send_msg, "msg length: %d", str_len);
     send_size = send(dst_sock, send_msg, MSG_SIZE, 0);
 
     if (send_size < 0) {

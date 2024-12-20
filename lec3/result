@@ -41,7 +41,9 @@ int main (int argc, char *argv[]) {
   printf("[ Server Info ]\n - IP Address: %s\n - Port: %d\n", ip_addr, port);
 
   // ソケットの生成
+  int yes = 1;
   c_sock = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+  setsockopt(c_sock, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
   if (c_sock < 0) {
     printf("socket error\n");
     freeaddrinfo(res);
@@ -71,9 +73,7 @@ int main (int argc, char *argv[]) {
     }
 
     // EOF (Ctrl-D 入力) であれば処理終了
-    if (read_size == 0) {
-      send_buf[0] = 0x03;
-      printf("finish sending to server!\n");
+    if (read_size < BUF_SIZE) {
       finish_flag = 1;
     }
 
@@ -85,7 +85,18 @@ int main (int argc, char *argv[]) {
       return 1;
     }
 
-    if (finish_flag) break;
+    if (finish_flag) {
+      clear_buf(send_buf, BUF_SIZE);
+      send_buf[0] = 0x03;
+      send_size = send(c_sock, send_buf, 1, 0);
+      if (send_size < 0) {
+        printf("send() failed\n");
+        close(c_sock);
+        return 1;
+      }
+      printf("finish sending to server!\n");
+      break;
+    }
   }
 
   // サーバーからのメッセージ受信

@@ -41,7 +41,9 @@ int main (int argc, char *argv[]) {
   printf("[ Server Info ]\n - IP Address: %s\n - Port: %d\n", ip_addr, port);
 
   // ソケットの生成
+  int yes = 1;
   c_sock = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+  setsockopt(c_sock, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
   if (c_sock < 0) {
     printf("socket error\n");
     freeaddrinfo(res);
@@ -71,9 +73,7 @@ int main (int argc, char *argv[]) {
     }
 
     // EOF (Ctrl-D 入力) であれば処理終了
-    if (read_size == 0) {
-      send_buf[0] = 0x03;
-      printf("finish sending to server!\n");
+    if (read_size < BUF_SIZE) {
       finish_flag = 1;
     }
 
@@ -85,7 +85,24 @@ int main (int argc, char *argv[]) {
       return 1;
     }
 
-    if (finish_flag) break;
+    // Enter 入力されても処理を続行
+    if (is_contain(send_buf, read_size, '\n')) continue;
+
+    // EOF (Ctrl-D 入力) であれば処理終了
+    // ASCIIの[EXT] = 0x03 を転送終了の合図とする
+    // 転送終了メッセージを送信
+    if (read_size < BUF_SIZE) {
+      clear_buf(send_buf, BUF_SIZE);
+      send_buf[0] = SIGNAL_END;
+      send_size = send(c_sock, send_buf, 1, 0);
+      if (send_size < 0) {
+        printf("send() failed\n");
+        close(c_sock);
+        return 1;
+      }
+      printf("\n [finish sending to server!]\n");
+      break;
+    }
   }
 
   // サーバーからのメッセージ受信
@@ -100,9 +117,9 @@ int main (int argc, char *argv[]) {
       return 1;
     }
 
-    if (strlen(recv_buf) < BUF_SIZE) {
-      break;
-    }
+    // if (is_contain(recv_buf, recv_size, '\0')) {
+    //   break;
+    // }
   }
 
   close(STDIN_FILENO);

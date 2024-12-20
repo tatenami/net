@@ -11,7 +11,8 @@
 #include <arpa/inet.h>
 #include <string.h>
 
-#define SIGNAL_END 0x03
+#define SIGNAL_END_MSG 0x03
+#define SIGNAL_END_CONNECTION 0x04
 
 void clear_buf(char* buf, int size);
 
