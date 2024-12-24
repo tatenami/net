@@ -18,7 +18,8 @@ int main (int argc, char *argv[]) {
     return 1;
   }
 
-  char send_buf[BUF_SIZE], recv_buf[BUF_SIZE];
+  char send_buf[BUF_SIZE];
+  char read_buf[BUF_SIZE];
   int c_sock;
   int read_size, write_size, send_size, recv_size;
   struct addrinfo hints, *res;
@@ -59,66 +60,79 @@ int main (int argc, char *argv[]) {
     return 1;
   }
 
-  // 入力
-  while (1) {
-    clear_buf(send_buf, BUF_SIZE);
-    read_size = read(STDIN_FILENO, send_buf, BUF_SIZE);
-    // printf("read size: %d\n", read_size);
-    if (read_size < 0) {
-      printf("read failed\n");
-      close(c_sock);
-      return 1;
-    }
+  int finish_flag = 0;
 
-    send_size = send(c_sock, send_buf, read_size, 0);
-    // printf("send size: %d\n", send_size);
-    if (send_size < 0) {
-      printf("send() failed\n");
-      close(c_sock);
-      return 1;
-    }
+  while (!finish_flag) {
+    // 入力
 
-    // Enter 入力されても処理を続行
-    // if (is_contain(send_buf, read_size, '\n')) continue;
-
-    // EOF (Ctrl-D 入力) であれば処理終了
-    // ASCIIの[EXT] = 0x03 を転送終了の合図とする
-    // 転送終了メッセージを送信
-    if (read_size < BUF_SIZE) {
+    int send_finish = 0;
+    while (1) {
       clear_buf(send_buf, BUF_SIZE);
-      send_buf[0] = SIGNAL_END_MSG;
-      send_size = send(c_sock, send_buf, 1, 0);
+      clear_buf(read_buf, BUF_SIZE);
+      read_size = read(STDIN_FILENO, read_buf, BUF_SIZE);
+      // printf("\nread size: %d", read_size);
+      // printf("msg: %s\n", read_buf);
+      if (read_size < 0) {
+        printf("read failed\n");
+        close(c_sock);
+        return 1;
+      }
+
+      strcpy(send_buf, read_buf);
+
+      // (Enter 入力) であれば処理終了
+      // ASCIIの[EXT] = 0x03 を転送終了の合図とする
+      // 転送終了メッセージを送信
+      if (read_size < BUF_SIZE) {
+        send_buf[read_size] = SIGNAL_END_MSG;
+        // printf("\n [finish sending to server!]\n");
+        send_finish = 1;
+      }
+
+      send_size = send(c_sock, send_buf, BUF_SIZE, 0);
+      // printf("\nsend size: %d", send_size);
       if (send_size < 0) {
         printf("send() failed\n");
         close(c_sock);
         return 1;
       }
-      // printf("\n [finish sending to server!]\n");
-      break;
-    }
-  }
 
-  // サーバーからのメッセージ受信
-  while (1) {
-    clear_buf(recv_buf, BUF_SIZE);
-    recv_size = recv(c_sock, recv_buf, BUF_SIZE, 0);
-    // printf("recv size: %d\n", recv_size);
-    if (recv_size < 0) {
-      printf("recv() failed\n");
-      close(c_sock);
-      return 1;
+      if (send_finish) break; 
     }
 
-    printf("\n");
-    write_size = write(STDOUT_FILENO, recv_buf, recv_size);
-    if (write_size < 0) {
-      printf("write failed\n");
-      close(c_sock);
-      return 1;
-    }
 
-    if (is_contain(recv_buf, recv_size, SIGNAL_END_CONNECTION)) {
-      break;
+    int recv_finish = 0;
+    // サーバーからのメッセージ受信
+    while (1) {
+      char tmp_buf[BUF_SIZE];
+      clear_buf(tmp_buf, BUF_SIZE);
+      recv_size = recv(c_sock, tmp_buf, BUF_SIZE, 0);
+      printf("recv size: %d\n", recv_size);
+      printf("recv msg: %s\n", tmp_buf);
+      if (recv_size < 0) {
+        printf("recv() failed\n");
+        close(c_sock);
+        return 1;
+      }
+
+      write_size = write(STDOUT_FILENO, tmp_buf, recv_size);
+      if (write_size < 0) {
+        printf("write failed\n");
+        close(c_sock);
+        return 1;
+      }
+
+      if (is_contain(tmp_buf, recv_size, SIGNAL_END_CONNECTION) > 0) {
+        // printf("finish!\n");
+        finish_flag = 1;
+      }
+
+      if (is_contain(tmp_buf, recv_size, SIGNAL_END_MSG) > 0) {
+        recv_finish = 1;
+        printf("signal-end.\n");
+      }
+
+      if (recv_finish) break;
     }
   }
 

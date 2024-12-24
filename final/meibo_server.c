@@ -12,7 +12,11 @@
 
 #include "utils.h"
 
-#define BUF_SIZE 100
+#define NET 1
+#define ORIGIN 0
+
+#define TMP_BUF_SIZE 10
+#define BUF_SIZE 10
 #define MAX_LINE_LEN 1024
 #define MAX_DATA_SIZE 10000
 
@@ -21,8 +25,11 @@ int dst_sock;
 int finish_flag = 0;
 int dst_connection = 0;
 
-char recv_buf[BUF_SIZE];
+char recv_buf[MAX_LINE_LEN];
 char send_buf[BUF_SIZE];
+
+int send_msg(char* msg);
+void send_signal(uint8_t signal);
 
 typedef struct{
     int year;
@@ -131,13 +138,8 @@ int get_line(FILE *fp, char *line){
 /*-------------[execute command functions]---------*/
 
 void cmd_quit(){
-  clear_buf(send_buf, BUF_SIZE);
-  int write_size = sprintf(send_buf, "See you!\n");
-  int send_size = send(dst_sock, send_buf, write_size, 0);
-
-  clear_buf(send_buf, write_size);
-  send_buf[0] = SIGNAL_END_CONNECTION;
-  send_size = send(dst_sock, send_buf, 1, 0);
+  int send_size = send_msg("See you!\n");
+  send_signal(SIGNAL_END_CONNECTION);
 
   if (send_size < 0) {
     fprintf(stderr, "send() failed\n");
@@ -149,8 +151,18 @@ void cmd_quit(){
 }
 
 void cmd_check(){
-    fprintf(stdout,"%d profile(s)\nEnable to add %d data(s)\n"
+    // fprintf(stdout,"%d profile(s)\nEnable to add %d data(s)\n"
+    //        ,profile_data_nitems, MAX_DATA_SIZE - profile_data_nitems);
+
+  char msg[MAX_LINE_LEN];
+  sprintf(msg, "%d profile(s)\nEnable to add %d data(s)\n"
            ,profile_data_nitems, MAX_DATA_SIZE - profile_data_nitems);
+
+  int send_size = send_msg(msg);
+  if (send_size < 0) {
+    fprintf(stderr, "send() failed\n");
+  }
+  send_signal(SIGNAL_END_MSG);
 }
 
 void cmd_print(int num){
@@ -231,12 +243,17 @@ profile *new_profile(profile *new_profile_data, char *line){
     char *date_element_add[3]; 
 
     if(split(line, profile_element, ',', 5) != 5){
-        fprintf(stderr, "Please input the correct Data-format\n");
-        return NULL;
+      // fprintf(stderr, "Please input the correct Data-format\n");
+      char *msg = "Please input the correct Data-format\n"; 
+      send_msg(msg);
+      send_signal(SIGNAL_END_MSG);
+      return NULL;
     }
     if(split(profile_element[2], date_element_add, '-', 3) != 3){
-        fprintf(stderr, "Please input the correct BirthDay-format\n");
-        return NULL;
+      char *msg = "Please input the correct BirthDay-format\n";
+      send_msg(msg);
+      send_signal(SIGNAL_END_MSG);
+      return NULL;
     }
 
     if(check_convert(convert(profile_element[0]), profile_element[0]) == 0)
@@ -266,14 +283,28 @@ profile *new_profile(profile *new_profile_data, char *line){
 //====================[ %P command ]=======================
 
 void print_profile_element(int num){
-    fprintf(stdout,"Id    : %d\n", profile_data_store[num].ID);
-    fprintf(stdout,"Name  : %s\n", profile_data_store[num].Name);
-    fprintf(stdout,"Birth : %04d-%02d-%02d\n",
-           profile_data_store[num].Date.year,
-           profile_data_store[num].Date.month,
-           profile_data_store[num].Date.day);
-    fprintf(stdout,"Addr. : %s\n", profile_data_store[num].Address);
-    fprintf(stdout,"Comm. : %s\n\n", profile_data_store[num].Comment);
+    // fprintf(stdout,"Id    : %d\n", profile_data_store[num].ID);
+    // fprintf(stdout,"Name  : %s\n", profile_data_store[num].Name);
+    // fprintf(stdout,"Birth : %04d-%02d-%02d\n",
+    //        profile_data_store[num].Date.year,
+    //        profile_data_store[num].Date.month,
+    //        profile_data_store[num].Date.day);
+    // fprintf(stdout,"Addr. : %s\n", profile_data_store[num].Address);
+    // fprintf(stdout,"Comm. : %s\n\n", profile_data_store[num].Comment);
+
+  char msg[MAX_LINE_LEN];
+  clear_buf(msg, MAX_LINE_LEN);
+
+  sprintf(msg, "Id    : %d\nName  : %s\nBirth : %04d-%02d-%02d\nAddr. : %s\nComm. : %s\n\n",
+  profile_data_store[num].ID, profile_data_store[num].Name,
+  profile_data_store[num].Date.year, profile_data_store[num].Date.month,
+  profile_data_store[num].Date.day,
+  profile_data_store[num].Address,
+  profile_data_store[num].Comment);
+
+  printf("%s", msg);
+
+  send_msg(msg);
 }
 
 void print_profile(int num){
@@ -299,7 +330,7 @@ void print_profile(int num){
     } 
 
     for(; profile_num < end_num; profile_num++){
-        fprintf(stdout, "[No.%d]\n", profile_num + 1);
+        // fprintf(stdout, "[No.%d]\n", profile_num + 1);
         print_profile_element(profile_num);
     }
 }
@@ -507,10 +538,12 @@ void parse_line(char *line){
     
     if(*line == '%'){
       exec_command(line[1], &line[3]);
+      // printf("command!\n");
     }
     else{
-      dst_connection = 0;
       new_profile(&profile_data_store[profile_data_nitems], line);
+      printf("registered! %d\n", profile_data_nitems);
+
     }
 }
 
@@ -537,8 +570,8 @@ int make_server_sock(char *port) {
 }
 
 
-int recv_msg(int sock) {
-  int recv_size = recv(sock, recv_buf, BUF_SIZE, 0);
+int recv_msg(int sock, char *buf, int size) {
+  int recv_size = recv(sock, buf, size, 0);
   if (recv_size < 0) {
     fprintf(stderr, "recv() failed\n");
     close(sock);
@@ -549,12 +582,64 @@ int recv_msg(int sock) {
   return recv_size;
 }
 
+int send_msg(char *msg) {
+  // 改行文字も含めて送信するため
+  int len = strlen(msg) + 1;
+
+  int send_sum = 0;
+  int send_count = (len / BUF_SIZE) + 1;
+  int count = 0;
+  printf("send count:%d\n", send_count);
+
+  while (count < send_count) {
+    char tmp_buf[BUF_SIZE];
+    clear_buf(tmp_buf, BUF_SIZE);
+    int copy_size;
+
+    if (len > BUF_SIZE) {
+      copy_size = BUF_SIZE;
+    }
+    else {
+      copy_size = len;
+    }
+
+    strncpy(tmp_buf, msg, copy_size);
+
+    // printf("copy size: %d\n", copy_size);
+    // printf("send msg: %s\n", send_buf);
+
+    int send_size = send(dst_sock, tmp_buf, BUF_SIZE, 0);
+
+    if (send_size < 0) {
+      fprintf(stderr, "send() failed\n");
+      return -1;
+    }
+
+    send_sum += send_size;
+    msg += BUF_SIZE;
+    len -= BUF_SIZE;
+    count++;
+  }
+
+  return send_sum;
+}
+
+void send_signal(uint8_t signal) {
+  char tmp_buf[BUF_SIZE];
+  tmp_buf[0] = signal;
+  // clear_buf(send_buf, BUF_SIZE);
+  // send_buf[0] = signal;
+  send(dst_sock, tmp_buf, BUF_SIZE, 0); 
+
+  // printf("send singal-end\n");
+}
+
 //--------------------[ main ]-----------------------------
 
 
 int main(int argc, char *argv[]){
-    // char line[MAX_LINE_LEN + 1];
 
+  #if NET
   if (argc < 2) {
     fprintf(stderr, "Args not enough!\n");
     return 1;
@@ -566,7 +651,7 @@ int main(int argc, char *argv[]){
     return 1;
   }
 
-  int ret = listen(s_sock, 5);
+  int ret = listen(s_sock, 1);
   if (ret < 0) {
     printf("listen() failed\n");
     return 1;
@@ -598,17 +683,42 @@ int main(int argc, char *argv[]){
   
     dst_connection = 1;
     while (dst_connection) {
-      clear_buf(recv_buf, BUF_SIZE);
-      clear_buf(send_buf, BUF_SIZE);
 
-      int recv_size = recv_msg(dst_sock);
-      printf("recv size: %d\n", recv_size);
-      if (recv_size < 0) {
-        fprintf(stderr, "recv_msg() failed\n");
-        break;
+      // int recv_size = recv_msg(dst_sock);
+      // printf("recv size: %d\n", recv_size);
+      // if (recv_size < 0) {
+      //   fprintf(stderr, "recv_msg() failed\n");
+      //   break;
+      // }
+
+      int msg_finish = 0;
+      char *frame_ptr = recv_buf;
+      clear_buf(recv_buf, MAX_LINE_LEN);
+
+      while (1) {
+        char tmp_buf[BUF_SIZE];
+        clear_buf(tmp_buf, BUF_SIZE);
+
+        int recv_size = recv(dst_sock, tmp_buf, TMP_BUF_SIZE, 0);
+        // printf("recv size: %d\n", recv_size);
+        // printf("msg: %s\n", tmp_buf);
+        if (is_contain(tmp_buf, recv_size, SIGNAL_END_MSG) > 0) {
+          // printf("end.\n");
+          tmp_buf[recv_size] = 0;
+          msg_finish = 1;
+        }
+
+        strncpy(frame_ptr, tmp_buf, recv_size);
+        frame_ptr += recv_size;
+
+        if (msg_finish) break; 
       }
 
+      printf("msg: [%s]\n", recv_buf);
       parse_line(recv_buf);
+ 
+      // send_msg("accept message\n");
+      send_signal(SIGNAL_END_MSG);
     }
 
     fprintf(stdout, "<disconnect> \tIP [%s] PORT [%d] SOCKET: [%d]\n", 
@@ -618,10 +728,18 @@ int main(int argc, char *argv[]){
 
   close(s_sock);
 
+  #endif
+
+  #if ORIGIN
+
+  // char line[MAX_LINE_LEN + 1];
+
   // while(get_line(stdin, line)){
   //   parse_line(line);
   //   if(finish) break;
   // }
+
+  #endif
 
   return 0;
 }

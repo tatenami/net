@@ -91,7 +91,7 @@ int main (int argc, char *argv[]) {
 
 
       // バッファー中の ASCIIの[EXT] = 0x03 を転送終了の合図とする
-      if (is_contain(recv_buf, recv_size, SIGNAL_END)) {
+      if (is_contain(recv_buf, recv_size, SIGNAL_END_MSG)) {
         *(fname_ptr - 1) = 0;
         printf("finish client sending msg!\n");
         break;
