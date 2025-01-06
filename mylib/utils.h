@@ -23,6 +23,6 @@ int addr_port(struct sockaddr_in *addr);
 
 char* addr_ip(struct sockaddr_in *addr);
 
-int is_contain(char *buf, int len, uint8_t ascii);
+int str_contain(char *buf, int len, uint8_t ascii);
 
 #endif // UTILS_H

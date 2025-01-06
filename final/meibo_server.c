@@ -9,6 +9,7 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #include <arpa/inet.h>
+#include <errno.h>
 
 #include "utils.h"
 
@@ -139,7 +140,7 @@ int get_line(FILE *fp, char *line){
 
 void cmd_quit(){
   int send_size = send_msg("See you!\n");
-  send_signal(SIGNAL_END_CONNECTION);
+//   send_signal(SIGNAL_END_CONNECTION);
 
   if (send_size < 0) {
     fprintf(stderr, "send() failed\n");
@@ -246,13 +247,11 @@ profile *new_profile(profile *new_profile_data, char *line){
       // fprintf(stderr, "Please input the correct Data-format\n");
       char *msg = "Please input the correct Data-format\n"; 
       send_msg(msg);
-      send_signal(SIGNAL_END_MSG);
       return NULL;
     }
     if(split(profile_element[2], date_element_add, '-', 3) != 3){
       char *msg = "Please input the correct BirthDay-format\n";
       send_msg(msg);
-      send_signal(SIGNAL_END_MSG);
       return NULL;
     }
 
@@ -302,8 +301,6 @@ void print_profile_element(int num){
   profile_data_store[num].Address,
   profile_data_store[num].Comment);
 
-  printf("%s", msg);
-
   send_msg(msg);
 }
 
@@ -330,7 +327,6 @@ void print_profile(int num){
     } 
 
     for(; profile_num < end_num; profile_num++){
-        // fprintf(stdout, "[No.%d]\n", profile_num + 1);
         print_profile_element(profile_num);
     }
 }
@@ -366,14 +362,18 @@ void find(char *word){
     int i, word_state_birth;
     char *ret[3];
 
-    fprintf(stdout, "word:[%s]\n\n", word);
+    // fprintf(stdout, "word:[%s]\n\n", word);
 
     if(split(word, ret, '-', 3) == 3) word_state_birth = 1;
     else word_state_birth = 0;
 
+    char buf[20];
+    clear_buf(buf, 20);
+
     for(i = 0; i < profile_data_nitems; i++){
         if(check_word(word, profile_data_store[i], word_state_birth, ret)){
-            fprintf(stdout, "[No.%d]\n", i + 1);
+            sprintf(buf, "[No.%d]\n", i + 1);
+            send_msg(buf);
             print_profile_element(i);
         }
     }
@@ -542,7 +542,7 @@ void parse_line(char *line){
     }
     else{
       new_profile(&profile_data_store[profile_data_nitems], line);
-      printf("registered! %d\n", profile_data_nitems);
+    //   printf("registered! %d\n", profile_data_nitems);
 
     }
 }
@@ -583,13 +583,19 @@ int recv_msg(int sock, char *buf, int size) {
 }
 
 int send_msg(char *msg) {
-  // 改行文字も含めて送信するため
+  // SIGNAL_END_MSGも含めて送信するため
   int len = strlen(msg) + 1;
 
   int send_sum = 0;
-  int send_count = (len / BUF_SIZE) + 1;
+  int send_count;
+  if (len <= 10) {
+    send_count = 1;
+  }
+  else {
+    send_count  = (len / BUF_SIZE) + 1;
+  }
+
   int count = 0;
-  printf("send count:%d\n", send_count);
 
   while (count < send_count) {
     char tmp_buf[BUF_SIZE];
@@ -604,9 +610,6 @@ int send_msg(char *msg) {
     }
 
     strncpy(tmp_buf, msg, copy_size);
-
-    // printf("copy size: %d\n", copy_size);
-    // printf("send msg: %s\n", send_buf);
 
     int send_size = send(dst_sock, tmp_buf, BUF_SIZE, 0);
 
@@ -627,19 +630,41 @@ int send_msg(char *msg) {
 void send_signal(uint8_t signal) {
   char tmp_buf[BUF_SIZE];
   tmp_buf[0] = signal;
-  // clear_buf(send_buf, BUF_SIZE);
-  // send_buf[0] = signal;
-  send(dst_sock, tmp_buf, BUF_SIZE, 0); 
+  send(dst_sock, tmp_buf, 1, 0); 
 
   // printf("send singal-end\n");
+}
+
+int read_client() {
+  int msg_finish = 0;
+  char *frame_ptr = recv_buf;
+
+  while (msg_finish != 1) {
+    char tmp_buf[BUF_SIZE];
+    clear_buf(tmp_buf, BUF_SIZE);
+
+    int recv_size = recv(dst_sock, tmp_buf, TMP_BUF_SIZE, 0);
+    if (recv_size == 0) {
+      close(dst_sock);
+      return 0;
+    }
+
+    int signal_index = str_contain(tmp_buf, recv_size, SIGNAL_END_MSG);
+    if (signal_index != -1) {
+      tmp_buf[signal_index] = 0;
+      msg_finish = 1;
+    }
+
+    strncpy(frame_ptr, tmp_buf, recv_size);
+    frame_ptr += recv_size;
+  }
+  return 1;
 }
 
 //--------------------[ main ]-----------------------------
 
 
 int main(int argc, char *argv[]){
-
-  #if NET
   if (argc < 2) {
     fprintf(stderr, "Args not enough!\n");
     return 1;
@@ -669,6 +694,7 @@ int main(int argc, char *argv[]){
     setsockopt(dst_sock, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
     if (dst_sock < 0) {
       fprintf(stderr, "accept() falied\n");
+      fprintf(stderr, "errno: %d\n", errno);
       close(s_sock);
       return 1;
     }
@@ -680,45 +706,20 @@ int main(int argc, char *argv[]){
             dst_ip, dst_port, dst_sock);
 
     // main routines
-  
     dst_connection = 1;
     while (dst_connection) {
-
-      // int recv_size = recv_msg(dst_sock);
-      // printf("recv size: %d\n", recv_size);
-      // if (recv_size < 0) {
-      //   fprintf(stderr, "recv_msg() failed\n");
-      //   break;
-      // }
-
-      int msg_finish = 0;
-      char *frame_ptr = recv_buf;
-      clear_buf(recv_buf, MAX_LINE_LEN);
-
-      while (1) {
-        char tmp_buf[BUF_SIZE];
-        clear_buf(tmp_buf, BUF_SIZE);
-
-        int recv_size = recv(dst_sock, tmp_buf, TMP_BUF_SIZE, 0);
-        // printf("recv size: %d\n", recv_size);
-        // printf("msg: %s\n", tmp_buf);
-        if (is_contain(tmp_buf, recv_size, SIGNAL_END_MSG) > 0) {
-          // printf("end.\n");
-          tmp_buf[recv_size] = 0;
-          msg_finish = 1;
-        }
-
-        strncpy(frame_ptr, tmp_buf, recv_size);
-        frame_ptr += recv_size;
-
-        if (msg_finish) break; 
+      if (read_client()) {
+        parse_line(recv_buf);
+        printf("msg: [%s]\n", recv_buf);
       }
-
-      printf("msg: [%s]\n", recv_buf);
-      parse_line(recv_buf);
+      else {
+        printf("client fault\n");
+      }
  
-      // send_msg("accept message\n");
-      send_signal(SIGNAL_END_MSG);
+      if (dst_connection == 0)
+        send_signal(SIGNAL_END_CONNECTION);
+      else
+        send_signal(SIGNAL_END_MSG);
     }
 
     fprintf(stdout, "<disconnect> \tIP [%s] PORT [%d] SOCKET: [%d]\n", 
@@ -727,19 +728,6 @@ int main(int argc, char *argv[]){
   }
 
   close(s_sock);
-
-  #endif
-
-  #if ORIGIN
-
-  // char line[MAX_LINE_LEN + 1];
-
-  // while(get_line(stdin, line)){
-  //   parse_line(line);
-  //   if(finish) break;
-  // }
-
-  #endif
 
   return 0;
 }

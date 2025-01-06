@@ -12,13 +12,11 @@
 
 #define RECV_BUF_SIZE 10
 #define READ_BUF_SIZE 10
-#define SEND_BUF_SIZE 1024
+#define SEND_BUF_SIZE 10
 
 char recv_buf[RECV_BUF_SIZE];
 char read_buf[READ_BUF_SIZE];
 char send_buf[SEND_BUF_SIZE];
-
-int stdin_read(int c_sock);
 
 int main (int argc, char *argv[]) {
   if (argc < 3) {
@@ -71,20 +69,43 @@ int main (int argc, char *argv[]) {
   while (!finish_flag) {
 
     // 入力
-    int len = stdin_read(c_sock);
-
-    /* buf長を求めて一括送信 */
-    int send_size = send(c_sock, send_buf, len, 0);
-    if (send_size < 0) {
-      printf("send() failed\n");
-      close(c_sock);
-      return 1;
-    }
-    // clear_buf(send_buf, len);
-
-    /* %R  */
-
+    int send_finish = 0;
     int recv_finish = 0;
+
+    while (!send_finish) {
+      clear_buf(read_buf, READ_BUF_SIZE);
+
+      int read_size = read(STDIN_FILENO, read_buf, READ_BUF_SIZE);
+      // printf("\nread size: %d", read_size);
+      if (read_size < 0) {
+        printf("read failed\n");
+        close(c_sock);
+        return 1;
+      }
+
+      int signal_index = str_contain(read_buf, READ_BUF_SIZE, '\n');
+      if (signal_index != -1) {
+        read_buf[signal_index] = '\0';
+        read_buf[READ_BUF_SIZE - 1] = '\0';
+        send_finish = 1;
+        // printf("finish input\n");
+      }
+
+      int send_size = send(c_sock, read_buf, SEND_BUF_SIZE, 0);
+      if (send_size < 0) {
+        printf("send() failed\n");
+        close(c_sock);
+        return 1;
+      }
+
+      if (read_buf[0] == '%' && read_buf[1] == 'Q') {
+        recv_finish = 1;
+        finish_flag = 1;
+        break;
+      }
+    }
+
+    int count = 0;
     // サーバーからのメッセージ受信
     while (!recv_finish) {
       clear_buf(recv_buf, RECV_BUF_SIZE);
@@ -97,6 +118,10 @@ int main (int argc, char *argv[]) {
         return 1;
       }
 
+      if (str_contain(recv_buf, RECV_BUF_SIZE, '\0') != -1) {
+        recv_finish = 1;
+      }
+
       write_size = write(STDOUT_FILENO, recv_buf, recv_size);
       if (write_size < 0) {
         printf("write failed\n");
@@ -104,16 +129,7 @@ int main (int argc, char *argv[]) {
         return 1;
       }
 
-      if (str_contain(recv_buf, recv_size, SIGNAL_END_CONNECTION) != -1) {
-        // printf("finish!\n");
-        finish_flag = 1;
-        break;
-      }
-
-      if (str_contain(recv_buf, recv_size, SIGNAL_END_MSG) != -1) {
-        recv_finish = 1;
-        // printf("signal-end.\n");
-      }
+      count++;
     }
   }
 
@@ -122,32 +138,4 @@ int main (int argc, char *argv[]) {
   close(c_sock);
 
   return 0;
-}
-
-int stdin_read(int c_sock) {
-  int read_finish = 0;
-  char *sbuf_ptr = send_buf; 
-
-  while (!read_finish) {
-    clear_buf(read_buf, READ_BUF_SIZE);
-
-    int read_size = read(STDIN_FILENO, read_buf, READ_BUF_SIZE);
-    // printf("\nread size: %d", read_size);
-    if (read_size < 0) {
-      printf("read failed\n");
-      close(c_sock);
-      return 1;
-    }
-
-    int signal_index = str_contain(read_buf, READ_BUF_SIZE, '\n');
-    if (signal_index != -1) {
-      read_buf[signal_index] = SIGNAL_END_MSG;
-      read_finish = 1;
-    }
-
-    strncpy(sbuf_ptr, read_buf, read_size);
-    sbuf_ptr += read_size;
-  }
-
-  return (int)(sbuf_ptr - send_buf);
 }

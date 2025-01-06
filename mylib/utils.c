@@ -24,10 +24,10 @@ char* addr_ip(struct sockaddr_in *addr) {
 }
 
 
-int is_contain(char *buf, int len, uint8_t ascii) {
+int str_contain(char *buf, int len, uint8_t ascii) {
   for (int i = 0; i < len; i++) {
     if (*buf == ascii) {
-      return 1;
+      return i;
     }
     buf++;
   }
