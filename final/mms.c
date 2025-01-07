@@ -10,7 +10,6 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <errno.h>
-#include <time.h>
 
 #include "mylib.h"
 
@@ -18,8 +17,6 @@
 #define BUF_SIZE 10
 #define MAX_LINE_LEN 1024
 #define MAX_DATA_SIZE 10000
-
-char log_dir[4] = "log";
 
 int s_sock;
 int dst_sock;
@@ -31,17 +28,6 @@ char send_buf[BUF_SIZE];
 
 int send_msg(char* msg);
 void send_signal(uint8_t signal);
-
-typedef struct {
-  char     ip_addr[20];
-  uint16_t port;
-  time_t   login_t;
-} client_info;
-
-typedef struct {
-  int  fd;
-  char path[50];
-} log_file;
 
 typedef struct{
     int year;
@@ -579,19 +565,6 @@ int make_server_sock(char *port) {
     return sock;
 }
 
-
-int recv_msg(int sock, char *buf, int size) {
-  int recv_size = recv(sock, buf, size, 0);
-  if (recv_size < 0) {
-    fprintf(stderr, "recv() failed\n");
-    close(sock);
-    close(sock);
-    return -1;
-  }
-
-  return recv_size;
-}
-
 int send_msg(char *msg) {
   // SIGNAL_END_MSGも含めて送信するため
   int len = strlen(msg) + 1;
@@ -641,17 +614,14 @@ void send_signal(uint8_t signal) {
   char tmp_buf[BUF_SIZE];
   tmp_buf[0] = signal;
   send(dst_sock, tmp_buf, 1, 0); 
-
-  // printf("send singal-end\n");
 }
 
-int recv_client(char *buf, int max_len) {
+int read_client() {
   int msg_finish = 0;
-  char *frame_ptr = buf;
-  char tmp_buf[BUF_SIZE];
-  clear_buf(recv_buf, max_len);
+  char *frame_ptr = recv_buf;
 
   while (msg_finish != 1) {
+    char tmp_buf[BUF_SIZE];
     clear_buf(tmp_buf, BUF_SIZE);
 
     int recv_size = recv(dst_sock, tmp_buf, TMP_BUF_SIZE, 0);
@@ -669,19 +639,18 @@ int recv_client(char *buf, int max_len) {
     strncpy(frame_ptr, tmp_buf, recv_size);
     frame_ptr += recv_size;
   }
-  return (int)(frame_ptr - buf);
+  return 1;
 }
 
 // success: return client socket (> 0)
 // fail: return -1 
-int make_client(client_info *c_info) {
+int make_client_sock(struct sockaddr_in *c_addr) {
   int yes = 1;
 
   // client 接続待受
-  struct sockaddr_in addr;
-  socklen_t addr_len = sizeof(addr);
+  socklen_t addr_len = sizeof(struct sockaddr_in);
 
-  int sock = accept(s_sock, (struct sockaddr *)&addr, &addr_len);
+  int sock = accept(s_sock, (struct sockaddr *)c_addr, &addr_len);
 
   // アドレスの再利用設定
   setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
@@ -692,66 +661,8 @@ int make_client(client_info *c_info) {
     return -1;
   }
 
-  strcpy(c_info->ip_addr, inet_ntoa(addr.sin_addr));
-  c_info->port = ntohs(addr.sin_port);
-  c_info->login_t = time(NULL);
-
   return sock;
 }
-
-// [ log functions ]
-
-void print_time(time_t *t) {
-  char *t_info = ctime(t);
-  printf("%s", t_info);
-}
-
-int write_log(log_file *file, char *msg) {
-
-  if (msg[0] != '\0') {
-    int w_size = write(file->fd, msg, strlen(msg));
-    write(file->fd, "\n", 1);
-
-    return w_size;
-  }
-
-  return 0;
-}
-
-int make_log_file(log_file *file, client_info *c_info) {
-  struct tm *t = localtime(&(c_info->login_t));
-  sprintf(file->path, "%s/%d-%02d-%02d_%02d-%02d-%02d.log", log_dir, t->tm_year + 1900, t->tm_mon + 1, t->tm_mday, 
-                                      t->tm_hour, t->tm_min, t->tm_sec);
-
-  file->fd = open(file->path, O_WRONLY | O_TRUNC | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP);
-  if (file->fd < 0) {
-    printf("fail to open log file\n");
-    return 0;
-  }
-
-  char day_info[100];
-  char net_info[100];
-
-  sprintf(day_info, "[TIME] %d/%d/%d %d:%d:%d", 
-          t->tm_year + 1900, t->tm_mon + 1, 
-          t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
-  sprintf(net_info, "[IP]   %s\n[PORT] %d", c_info->ip_addr, c_info->port);
-
-  write_log(file, day_info);
-  write_log(file, net_info);
-
-  return 1;
-}
-
-int close_log_file(log_file *file) {
-  time_t logout_t = time(NULL);
-  char msg[50];
-  sprintf(msg, "[UNIX TIME] %d", (int)(logout_t));
-  write_log(file, msg);
-
-  close(file->fd);
-}
-
 
 //--------------------[ main ]-----------------------------
 
@@ -768,7 +679,7 @@ int main(int argc, char *argv[]){
     return 1;
   }
 
-  int ret = listen(s_sock, 1);
+  int ret = listen(s_sock, 5);
   if (ret < 0) {
     printf("listen() failed\n");
     return 1;
@@ -776,44 +687,49 @@ int main(int argc, char *argv[]){
 
 
   while (finish_flag != 1) {
-    client_info c_info;
-    log_file    lf;
-    dst_sock = make_client(&c_info);
-    if (make_log_file(&lf, &c_info) < 0) {
-      printf("fail to make log file\n");
-    }
+    struct sockaddr_in dst_addr;
+    dst_sock = make_client_sock(&dst_addr);
 
-    printf("log file: %s\n", lf.path);
+    char *dst_ip = addr_ip(&dst_addr);
+    int dst_port = addr_port(&dst_addr);
 
     fprintf(stdout, "<connect> \tIP [%s] PORT [%d] SOCKET: [%d]\n", 
-            c_info.ip_addr, c_info.port, dst_sock);
+            dst_ip, dst_port, dst_sock);
 
-    // main routines
-    dst_connection = 1;
-    while (dst_connection) {
-      if (recv_client(recv_buf, MAX_LINE_LEN) > 0) {
-        // ログ追加 -> 処理
-        printf("msg: [%s]\n", recv_buf);
-        write_log(&lf, recv_buf);
-        parse_line(recv_buf);
-      }
-      else {
-        printf("client fault\n");
-        dst_connection = 0;
-        break;
-      }
- 
-      if (dst_connection == 0)
-        send_signal(SIGNAL_END_CONNECTION);
-      else
-        send_signal(SIGNAL_END_MSG);
+    int pid = fork();
+
+    if (pid < -1) {
+      printf("fail to make process\n");
+      return 1;
     }
 
-    fprintf(stdout, "<disconnect> \tIP [%s] PORT [%d] SOCKET: [%d]\n", 
-            c_info.ip_addr, c_info.port, dst_sock);
+    if (pid > 0) {
+      printf("make process! pid: %d\n", pid);
+    }
+    else {
+      // main routines
+      dst_connection = 1;
+      while (dst_connection) {
+        if (read_client()) {
+          parse_line(recv_buf);
+          printf("msg: [%s] from sock: [%d]\n", recv_buf, dst_sock);
+        }
+        else {
+          printf("client fault\n");
+          dst_connection = 0;
+          break;
+        }
+  
+        if (dst_connection == 0)
+          send_signal(SIGNAL_END_CONNECTION);
+        else
+          send_signal(SIGNAL_END_MSG);
+      }
 
-    close(dst_sock);
-    close_log_file(&lf);
+      fprintf(stdout, "<disconnect> \tIP [%s] PORT [%d] SOCKET: [%d]\n", 
+              dst_ip, dst_port, dst_sock);
+      close(dst_sock);
+    }
   }
 
   close(s_sock);

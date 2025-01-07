@@ -88,7 +88,7 @@ int main (int argc, char *argv[]) {
         read_buf[signal_index] = '\0';
         read_buf[READ_BUF_SIZE - 1] = '\0';
         send_finish = 1;
-        // printf("finish input\n");
+        // printf("\nfinish input\n");
       }
 
       int send_size = send(c_sock, read_buf, SEND_BUF_SIZE, 0);
@@ -110,15 +110,14 @@ int main (int argc, char *argv[]) {
     while (!recv_finish) {
       clear_buf(recv_buf, RECV_BUF_SIZE);
       recv_size = recv(c_sock, recv_buf, RECV_BUF_SIZE, 0);
-      // printf("\nrecv size: %d\n", recv_size);
-      // printf("recv msg: %s\n", recv_buf);
       if (recv_size < 0) {
         printf("recv() failed\n");
         close(c_sock);
         return 1;
       }
 
-      if (str_contain(recv_buf, RECV_BUF_SIZE, '\0') != -1) {
+      if (recv_buf[recv_size - 1] == '\0') {
+        // printf("recv finished\n");
         recv_finish = 1;
       }
 

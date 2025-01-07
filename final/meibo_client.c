@@ -8,7 +8,7 @@
 #include <string.h>
 #include <stdio.h>
 
-#include "utils.h"
+#include "mylib.h"
 
 #define RECV_BUF_SIZE 10
 #define READ_BUF_SIZE 10
@@ -19,6 +19,7 @@ char read_buf[READ_BUF_SIZE];
 char send_buf[SEND_BUF_SIZE];
 
 int stdin_read(int c_sock);
+int stdout_msg(char *buf);
 
 int main (int argc, char *argv[]) {
   if (argc < 3) {
@@ -69,28 +70,23 @@ int main (int argc, char *argv[]) {
   int finish_flag = 0;
 
   while (!finish_flag) {
-
-    // 入力
     int len = stdin_read(c_sock);
 
     /* buf長を求めて一括送信 */
+    clear_buf(send_buf, SEND_BUF_SIZE);
     int send_size = send(c_sock, send_buf, len, 0);
     if (send_size < 0) {
       printf("send() failed\n");
       close(c_sock);
       return 1;
     }
-    // clear_buf(send_buf, len);
-
-    /* %R  */
 
     int recv_finish = 0;
     // サーバーからのメッセージ受信
     while (!recv_finish) {
       clear_buf(recv_buf, RECV_BUF_SIZE);
       recv_size = recv(c_sock, recv_buf, RECV_BUF_SIZE, 0);
-      // printf("\nrecv size: %d\n", recv_size);
-      // printf("recv msg: %s\n", recv_buf);
+
       if (recv_size < 0) {
         printf("recv() failed\n");
         close(c_sock);
@@ -120,10 +116,13 @@ int main (int argc, char *argv[]) {
   close(STDIN_FILENO);
   close(STDOUT_FILENO);
   close(c_sock);
+  freeaddrinfo(res);
 
   return 0;
 }
 
+// return
+// size of reading msg
 int stdin_read(int c_sock) {
   int read_finish = 0;
   char *sbuf_ptr = send_buf; 
