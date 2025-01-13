@@ -1,6 +1,6 @@
 TARGET=meibo_server
 SRCS=${TARGET}.c
-LOP=-L../mylib/ -lmylib
+LOP=-L. -lmylib
 COP=-Wall -g
 
 ${TARGET}: ${SRCS}

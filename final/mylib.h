@@ -13,6 +13,8 @@
 
 #define SIGNAL_END_MSG 0x03
 #define SIGNAL_END_CONNECTION 0x04
+#define SIGNAL_COMEBACK 0x0d
+#define SIGNAL_SERVER_TERMINATE 0x7f
 
 void clear_buf(char* buf, int size);
 

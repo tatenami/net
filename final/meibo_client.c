@@ -20,6 +20,7 @@ char send_buf[SEND_BUF_SIZE];
 
 int stdin_read(int c_sock);
 int stdout_msg(char *buf);
+void comeback_routine(int c_sock);
 
 int main (int argc, char *argv[]) {
   if (argc < 3) {
@@ -68,12 +69,26 @@ int main (int argc, char *argv[]) {
   }
 
   int finish_flag = 0;
+  clear_buf(recv_buf, RECV_BUF_SIZE);
+
+  comeback_routine(c_sock);
 
   while (!finish_flag) {
+
+    // サーバーの終了通知
+    if (str_contain(recv_buf, RECV_BUF_SIZE, SIGNAL_SERVER_TERMINATE) != -1) {
+      stdout_msg("[ERROR] Server is terminated.\n");
+      break;
+    }
+    else {
+      stdout_msg("> ");
+    }
+
+    // メッセージ入力処理
+    clear_buf(send_buf, SEND_BUF_SIZE);
     int len = stdin_read(c_sock);
 
-    /* buf長を求めて一括送信 */
-    clear_buf(send_buf, SEND_BUF_SIZE);
+    // buf長を求めて一括送信
     int send_size = send(c_sock, send_buf, len, 0);
     if (send_size < 0) {
       printf("send() failed\n");
@@ -82,17 +97,24 @@ int main (int argc, char *argv[]) {
     }
 
     int recv_finish = 0;
+
     // サーバーからのメッセージ受信
     while (!recv_finish) {
       clear_buf(recv_buf, RECV_BUF_SIZE);
       recv_size = recv(c_sock, recv_buf, RECV_BUF_SIZE, 0);
-
       if (recv_size < 0) {
         printf("recv() failed\n");
         close(c_sock);
         return 1;
       }
 
+      if (str_contain(recv_buf, RECV_BUF_SIZE, SIGNAL_SERVER_TERMINATE) != -1) {
+        stdout_msg("[ERROR] Server is terminated.\n");
+        finish_flag = 1;
+        break;
+      }
+
+      // 標準出力に表示
       write_size = write(STDOUT_FILENO, recv_buf, recv_size);
       if (write_size < 0) {
         printf("write failed\n");
@@ -100,15 +122,15 @@ int main (int argc, char *argv[]) {
         return 1;
       }
 
+      // 接続終了判定
       if (str_contain(recv_buf, recv_size, SIGNAL_END_CONNECTION) != -1) {
-        // printf("finish!\n");
         finish_flag = 1;
         break;
       }
 
+      // メッセージ終了判定
       if (str_contain(recv_buf, recv_size, SIGNAL_END_MSG) != -1) {
         recv_finish = 1;
-        // printf("signal-end.\n");
       }
     }
   }
@@ -131,9 +153,7 @@ int stdin_read(int c_sock) {
     clear_buf(read_buf, READ_BUF_SIZE);
 
     int read_size = read(STDIN_FILENO, read_buf, READ_BUF_SIZE);
-    // printf("\nread size: %d", read_size);
     if (read_size < 0) {
-      printf("read failed\n");
       close(c_sock);
       return 1;
     }
@@ -149,4 +169,43 @@ int stdin_read(int c_sock) {
   }
 
   return (int)(sbuf_ptr - send_buf);
+}
+
+int stdout_msg(char *buf) {
+  int w_size = write(STDOUT_FILENO, buf, strlen(buf));
+  return w_size;
+}
+
+void comeback_routine(int c_sock) {
+  clear_buf(recv_buf, RECV_BUF_SIZE);
+
+  // シグナル受信
+  int r_size = recv(c_sock, recv_buf, RECV_BUF_SIZE, 0);
+  if (str_contain(recv_buf, r_size, SIGNAL_COMEBACK) == -1) {
+    return;
+  }
+
+  clear_buf(read_buf, READ_BUF_SIZE);
+  stdout_msg("Return to the state before error exit ? [y/n] ");
+
+  clear_buf(read_buf, READ_BUF_SIZE);
+  r_size = read(STDIN_FILENO, read_buf, READ_BUF_SIZE);
+
+  // 応答の送信
+  send(c_sock, read_buf, 1, 0);
+
+  // メッセージ受信
+  int recv_finish = 0;
+  while (!recv_finish) {
+    clear_buf(recv_buf, RECV_BUF_SIZE);
+    r_size = recv(c_sock, recv_buf, RECV_BUF_SIZE, 0);
+
+    int signal_index = str_contain(recv_buf, r_size, SIGNAL_END_MSG);
+    if (signal_index != -1) {
+      recv_buf[signal_index] = 0;
+      recv_finish = 1;
+    }
+
+    write(STDOUT_FILENO, recv_buf, r_size);
+  }
 }

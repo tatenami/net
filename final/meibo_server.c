@@ -11,6 +11,7 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <time.h>
+#include <signal.h>
 
 #include "mylib.h"
 
@@ -19,18 +20,19 @@
 #define MAX_LINE_LEN 1024
 #define MAX_DATA_SIZE 10000
 
-char log_dir[4] = "log";
+char log_dir[] = "log";
+char tmp_csv_path[] = "log/tmp.csv";
+char tmp_log_path[] = "log/tmp.log";
 
 int s_sock;
 int dst_sock;
 int finish_flag = 0;
 int dst_connection = 0;
 
-char recv_buf[MAX_LINE_LEN];
-char send_buf[BUF_SIZE];
-
-int send_msg(char* msg);
-void send_signal(uint8_t signal);
+typedef struct {
+  int  fd;
+  char path[50];
+} log_file;
 
 typedef struct {
   char     ip_addr[20];
@@ -38,10 +40,15 @@ typedef struct {
   time_t   login_t;
 } client_info;
 
-typedef struct {
-  int  fd;
-  char path[50];
-} log_file;
+log_file lf;
+client_info c_info;
+
+
+char recv_buf[MAX_LINE_LEN];
+char send_buf[BUF_SIZE];
+
+int send_msg(char* msg);
+void send_signal(uint8_t signal);
 
 typedef struct{
     int year;
@@ -641,19 +648,16 @@ void send_signal(uint8_t signal) {
   char tmp_buf[BUF_SIZE];
   tmp_buf[0] = signal;
   send(dst_sock, tmp_buf, 1, 0); 
-
-  // printf("send singal-end\n");
 }
 
 int recv_client(char *buf, int max_len) {
   int msg_finish = 0;
   char *frame_ptr = buf;
-  char tmp_buf[BUF_SIZE];
+  char tmp_buf[TMP_BUF_SIZE];
   clear_buf(recv_buf, max_len);
 
   while (msg_finish != 1) {
-    clear_buf(tmp_buf, BUF_SIZE);
-
+    clear_buf(tmp_buf, TMP_BUF_SIZE);
     int recv_size = recv(dst_sock, tmp_buf, TMP_BUF_SIZE, 0);
     if (recv_size == 0) {
       close(dst_sock);
@@ -718,6 +722,18 @@ int write_log(log_file *file, char *msg) {
   return 0;
 }
 
+int make_tmp_log(log_file *c_lf, client_info *c_info) {
+  log_file tmp_lf;
+  strcpy(tmp_lf.path, tmp_log_path);
+  tmp_lf.fd = open(tmp_lf.path, O_WRONLY | O_TRUNC | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP);
+
+  // ログファイル名の記入
+  write_log(&tmp_lf, c_lf->path);
+  m_write(tmp_csv_path);
+
+  return close(tmp_lf.fd);
+}
+
 int make_log_file(log_file *file, client_info *c_info) {
   struct tm *t = localtime(&(c_info->login_t));
   sprintf(file->path, "%s/%d-%02d-%02d_%02d-%02d-%02d.log", log_dir, t->tm_year + 1900, t->tm_mon + 1, t->tm_mday, 
@@ -744,14 +760,52 @@ int make_log_file(log_file *file, client_info *c_info) {
 }
 
 int close_log_file(log_file *file) {
-  time_t logout_t = time(NULL);
-  char msg[50];
-  sprintf(msg, "[UNIX TIME] %d", (int)(logout_t));
-  write_log(file, msg);
-
-  close(file->fd);
+  return close(file->fd);
 }
 
+// [ signal handling ]
+
+void exit_handler(int singnal) {
+  m_write(tmp_csv_path);
+  close_log_file(&lf);
+  make_tmp_log(&lf, &c_info);
+
+  send_signal(SIGNAL_SERVER_TERMINATE);
+  close(dst_sock);
+  exit(1);
+}
+
+// comeback 
+
+void comeback_routine() {
+  log_file tmp_log;
+  strcpy(tmp_log.path, tmp_log_path);
+  tmp_log.fd = open(tmp_log.path, O_WRONLY);
+
+  if (tmp_log.fd < 0) {
+    printf("not exist log.\n");
+    send_signal(SIGNAL_END_MSG);
+    return;
+  }
+
+  // 最新のログファイル名を取得
+  char log_file_path[50];
+  read(tmp_log.fd, log_file_path, 50);
+
+  // 復帰シグナル送信
+  send_signal(SIGNAL_COMEBACK);
+
+  // 応答の受信
+  char response[2];
+  recv(dst_sock, response, 2, 0);
+
+  if (response[0] == 'y') {
+    printf("load log.\n");
+    m_read(tmp_csv_path);
+  }
+
+  send_signal(SIGNAL_END_MSG);
+}
 
 //--------------------[ main ]-----------------------------
 
@@ -774,46 +828,60 @@ int main(int argc, char *argv[]){
     return 1;
   }
 
+  signal(SIGINT, exit_handler);
 
   while (finish_flag != 1) {
-    client_info c_info;
-    log_file    lf;
     dst_sock = make_client(&c_info);
     if (make_log_file(&lf, &c_info) < 0) {
       printf("fail to make log file\n");
     }
 
     printf("log file: %s\n", lf.path);
+    fprintf(stdout, "<connect> \tIP [%s] PORT [%d] SOCKET: [%d]\n", c_info.ip_addr, c_info.port, dst_sock);
 
-    fprintf(stdout, "<connect> \tIP [%s] PORT [%d] SOCKET: [%d]\n", 
-            c_info.ip_addr, c_info.port, dst_sock);
+    int pid = fork();
 
-    // main routines
-    dst_connection = 1;
-    while (dst_connection) {
-      if (recv_client(recv_buf, MAX_LINE_LEN) > 0) {
-        // ログ追加 -> 処理
-        printf("msg: [%s]\n", recv_buf);
-        write_log(&lf, recv_buf);
-        parse_line(recv_buf);
-      }
-      else {
-        printf("client fault\n");
-        dst_connection = 0;
-        break;
-      }
- 
-      if (dst_connection == 0)
-        send_signal(SIGNAL_END_CONNECTION);
-      else
-        send_signal(SIGNAL_END_MSG);
+    if (pid < -1) {
+      printf("fail to make process\n");
+      return 1;
     }
 
-    fprintf(stdout, "<disconnect> \tIP [%s] PORT [%d] SOCKET: [%d]\n", 
-            c_info.ip_addr, c_info.port, dst_sock);
+    if (pid > 0) {
+      printf("make process! pid: %d\n", pid);
+    }
+    else {
+      comeback_routine();
 
-    close(dst_sock);
-    close_log_file(&lf);
+      // main routines
+      dst_connection = 1;
+      while (dst_connection) {
+        if (recv_client(recv_buf, MAX_LINE_LEN) > 0) {
+          // ログ追加 -> 処理
+          printf("msg: [%s]\n", recv_buf);
+          write_log(&lf, recv_buf);
+          parse_line(recv_buf);
+        }
+        else {
+          printf("client fault\n");
+          make_tmp_log(&lf, &c_info);
+          dst_connection = 0;
+          break;
+        }
+  
+        if (dst_connection == 0)
+          send_signal(SIGNAL_END_CONNECTION);
+        else
+          send_signal(SIGNAL_END_MSG);
+      }
+
+      fprintf(stdout, "<disconnect> \tIP [%s] PORT [%d] SOCKET: [%d]\n", 
+              c_info.ip_addr, c_info.port, dst_sock);
+
+      delete_profile(profile_data_nitems);
+
+      close(dst_sock);
+      close_log_file(&lf);
+    }
   }
 
   close(s_sock);
