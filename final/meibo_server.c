@@ -216,6 +216,7 @@ void exec_command(char cmd, char *param){
     case 'P':
         num = convert(param);
         if(check_convert(num, param)) cmd_print(num);
+        else send_msg("Not enough arg: to print profiles.\n");
         break;
     case 'R':
         cmd_read(param);
@@ -234,6 +235,7 @@ void exec_command(char cmd, char *param){
         if(*param) num = convert(param);
         else break;
         if(check_convert(num, param)) delete_profile(num);
+        else send_msg("Not enough arg: number of profiles to delete.\n");
         break;
     default:
         fprintf(stderr, "No such command '%%%c'\n", cmd);
@@ -325,7 +327,6 @@ void print_profile(int num){
     int profile_num, end_num;
 
     if(profile_data_nitems == 0){
-        fprintf(stdout,"No datas.\n");
         return;
     }
     if(num > 0){
@@ -405,7 +406,9 @@ void m_read(char *filename){
     FILE *fp = fopen(filename, "r");
     
     if(fp == NULL){
-        fprintf(stderr, "Failed to open file %s\n", filename);
+      char msg[40];
+        sprintf(msg, "Failed to open file %s\n", filename);
+        send_msg(msg);
         return;
     }
 
@@ -433,7 +436,8 @@ void m_write(char *filename){
     FILE *fp = fopen(filename, "w");
 
     if(fp == NULL){
-        fprintf(stderr, "Failed to open file %s\n", filename);
+      char msg[40];
+        sprintf(msg, "Failed to open file %s\n", filename);
         return;
     }
 
@@ -487,7 +491,9 @@ void buble_sort(int num){
 
 void sort(int num){
     if(!(1 <= num && num <= 5)){
-        fprintf(stderr, "No column No.%d\n", num);
+      char msg[30];
+        sprintf(msg, "No column No.%d\n", num);
+        send_msg(msg);
         return;
     }
     
@@ -722,7 +728,7 @@ int write_log(log_file *file, char *msg) {
   return 0;
 }
 
-int make_tmp_log(log_file *c_lf, client_info *c_info) {
+int make_tmp_log(log_file *c_lf) {
   log_file tmp_lf;
   strcpy(tmp_lf.path, tmp_log_path);
   tmp_lf.fd = open(tmp_lf.path, O_WRONLY | O_TRUNC | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP);
@@ -768,7 +774,7 @@ int close_log_file(log_file *file) {
 void exit_handler(int singnal) {
   m_write(tmp_csv_path);
   close_log_file(&lf);
-  make_tmp_log(&lf, &c_info);
+  make_tmp_log(&lf);
 
   send_signal(SIGNAL_SERVER_TERMINATE);
   close(dst_sock);
@@ -787,10 +793,6 @@ void comeback_routine() {
     send_signal(SIGNAL_END_MSG);
     return;
   }
-
-  // 最新のログファイル名を取得
-  char log_file_path[50];
-  read(tmp_log.fd, log_file_path, 50);
 
   // 復帰シグナル送信
   send_signal(SIGNAL_COMEBACK);
@@ -847,9 +849,10 @@ int main(int argc, char *argv[]){
     }
 
     if (pid > 0) {
-      printf("make process! pid: %d\n", pid);
+      printf("make process pid: %d\n", pid);
     }
     else {
+      delete_profile(profile_data_nitems);
       comeback_routine();
 
       // main routines
@@ -857,13 +860,13 @@ int main(int argc, char *argv[]){
       while (dst_connection) {
         if (recv_client(recv_buf, MAX_LINE_LEN) > 0) {
           // ログ追加 -> 処理
-          printf("msg: [%s]\n", recv_buf);
+          printf("msg: [%s] (pid :%d)\n", recv_buf, pid);
           write_log(&lf, recv_buf);
           parse_line(recv_buf);
         }
         else {
           printf("client fault\n");
-          make_tmp_log(&lf, &c_info);
+          make_tmp_log(&lf);
           dst_connection = 0;
           break;
         }
@@ -877,11 +880,10 @@ int main(int argc, char *argv[]){
       fprintf(stdout, "<disconnect> \tIP [%s] PORT [%d] SOCKET: [%d]\n", 
               c_info.ip_addr, c_info.port, dst_sock);
 
-      delete_profile(profile_data_nitems);
-
-      close(dst_sock);
       close_log_file(&lf);
     }
+
+    close(dst_sock);
   }
 
   close(s_sock);

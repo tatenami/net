@@ -12,13 +12,13 @@
 
 #define RECV_BUF_SIZE 10
 #define READ_BUF_SIZE 10
-#define SEND_BUF_SIZE 1024
+#define SEND_BUF_SIZE 10
 
 char recv_buf[RECV_BUF_SIZE];
 char read_buf[READ_BUF_SIZE];
 char send_buf[SEND_BUF_SIZE];
 
-int stdin_read(int c_sock);
+int stdin_read_send(int c_sock);
 int stdout_msg(char *buf);
 void comeback_routine(int c_sock);
 
@@ -85,12 +85,12 @@ int main (int argc, char *argv[]) {
     }
 
     // メッセージ入力処理
-    clear_buf(send_buf, SEND_BUF_SIZE);
-    int len = stdin_read(c_sock);
+    // clear_buf(send_buf, SEND_BUF_SIZE);
+    int len = stdin_read_send(c_sock);
 
     // buf長を求めて一括送信
-    int send_size = send(c_sock, send_buf, len, 0);
-    if (send_size < 0) {
+    // int send_size = send(c_sock, send_buf, len, 0);
+    if (len < 0) {
       printf("send() failed\n");
       close(c_sock);
       return 1;
@@ -145,9 +145,9 @@ int main (int argc, char *argv[]) {
 
 // return
 // size of reading msg
-int stdin_read(int c_sock) {
+int stdin_read_send(int c_sock) {
   int read_finish = 0;
-  char *sbuf_ptr = send_buf; 
+  // char *sbuf_ptr = send_buf; 
 
   while (!read_finish) {
     clear_buf(read_buf, READ_BUF_SIZE);
@@ -155,7 +155,7 @@ int stdin_read(int c_sock) {
     int read_size = read(STDIN_FILENO, read_buf, READ_BUF_SIZE);
     if (read_size < 0) {
       close(c_sock);
-      return 1;
+      return 0;
     }
 
     int signal_index = str_contain(read_buf, READ_BUF_SIZE, '\n');
@@ -164,11 +164,18 @@ int stdin_read(int c_sock) {
       read_finish = 1;
     }
 
-    strncpy(sbuf_ptr, read_buf, read_size);
-    sbuf_ptr += read_size;
-  }
+    int send_size = send(c_sock, read_buf, read_size, 0);
+    if (send_size < 0) {
+      close(c_sock);
+      return 0;
+    }
 
-  return (int)(sbuf_ptr - send_buf);
+    // strncpy(sbuf_ptr, read_buf, read_size);
+    // sbuf_ptr += read_size;
+  }
+  return 1;
+
+  // return (int)(sbuf_ptr - send_buf);
 }
 
 int stdout_msg(char *buf) {
