@@ -772,7 +772,7 @@ int close_log_file(log_file *file) {
 // [ signal handling ]
 
 void exit_handler(int singnal) {
-  m_write(tmp_csv_path);
+  // m_write(tmp_csv_path);
   close_log_file(&lf);
   make_tmp_log(&lf);
 
@@ -804,6 +804,9 @@ void comeback_routine() {
   if (response[0] == 'y') {
     printf("load log.\n");
     m_read(tmp_csv_path);
+    char rm_cmd[20];
+    sprintf(rm_cmd, "rm %s", tmp_csv_path);
+    system(rm_cmd);
   }
 
   send_signal(SIGNAL_END_MSG);
