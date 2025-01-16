@@ -84,12 +84,9 @@ int main (int argc, char *argv[]) {
       stdout_msg("> ");
     }
 
-    // メッセージ入力処理
-    // clear_buf(send_buf, SEND_BUF_SIZE);
+    // メッセージ入力・送信
     int len = stdin_read_send(c_sock);
 
-    // buf長を求めて一括送信
-    // int send_size = send(c_sock, send_buf, len, 0);
     if (len < 0) {
       printf("send() failed\n");
       close(c_sock);
@@ -108,7 +105,8 @@ int main (int argc, char *argv[]) {
         return 1;
       }
 
-      if (str_contain(recv_buf, RECV_BUF_SIZE, SIGNAL_SERVER_TERMINATE) != -1) {
+      // サーバープログラムからの終了通知処理
+      if (str_contain(recv_buf, recv_size, SIGNAL_SERVER_TERMINATE) != -1) {
         stdout_msg("[ERROR] Server is terminated.\n");
         finish_flag = 1;
         break;
