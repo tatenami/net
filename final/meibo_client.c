@@ -80,9 +80,6 @@ int main (int argc, char *argv[]) {
       stdout_msg("[ERROR] Server is terminated.\n");
       break;
     }
-    else {
-      stdout_msg("> ");
-    }
 
     // メッセージ入力・送信
     int len = stdin_read_send(c_sock);
@@ -146,9 +143,9 @@ int main (int argc, char *argv[]) {
 int stdin_read_send(int c_sock) {
   int read_finish = 0;
   // char *sbuf_ptr = send_buf; 
+  // clear_buf(read_buf, READ_BUF_SIZE);
 
   while (!read_finish) {
-    clear_buf(read_buf, READ_BUF_SIZE);
 
     int read_size = read(STDIN_FILENO, read_buf, READ_BUF_SIZE);
     if (read_size < 0) {
@@ -156,9 +153,9 @@ int stdin_read_send(int c_sock) {
       return 0;
     }
 
-    int signal_index = str_contain(read_buf, READ_BUF_SIZE, '\n');
-    if (signal_index != -1) {
-      read_buf[signal_index] = SIGNAL_END_MSG;
+    // int signal_index = str_contain(read_buf, READ_BUF_SIZE, '\n');
+    if (read_buf[read_size - 1] == '\n') {
+      read_buf[read_size - 1] = SIGNAL_END_MSG;
       read_finish = 1;
     }
 
@@ -190,10 +187,7 @@ void comeback_routine(int c_sock) {
     return;
   }
 
-  clear_buf(read_buf, READ_BUF_SIZE);
   stdout_msg("Return to the state before error exit ? [y/n] ");
-
-  clear_buf(read_buf, READ_BUF_SIZE);
   r_size = read(STDIN_FILENO, read_buf, READ_BUF_SIZE);
 
   // 応答の送信
@@ -202,7 +196,6 @@ void comeback_routine(int c_sock) {
   // メッセージ受信
   int recv_finish = 0;
   while (!recv_finish) {
-    clear_buf(recv_buf, RECV_BUF_SIZE);
     r_size = recv(c_sock, recv_buf, RECV_BUF_SIZE, 0);
 
     int signal_index = str_contain(recv_buf, r_size, SIGNAL_END_MSG);
