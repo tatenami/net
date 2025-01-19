@@ -22,12 +22,12 @@
 
 char log_dir[] = "log";
 char tmp_csv_path[] = "log/tmp.csv";
-char tmp_log_path[] = "log/tmp.log";
 
-int s_sock;
-int dst_sock;
+int s_sock = -1;
+int dst_sock = -1;
 int finish_flag = 0;
 int dst_connection = 0;
+int pid = -1;
 
 typedef struct {
   int  fd;
@@ -44,7 +44,8 @@ log_file lf;
 client_info c_info;
 
 
-char recv_buf[MAX_LINE_LEN];
+char recv_buf[MAX_LINE_LEN + 1];
+char log_buf[MAX_LINE_LEN + 1];
 char send_buf[BUF_SIZE];
 
 int send_msg(char* msg);
@@ -69,7 +70,7 @@ profile profile_data_store[MAX_DATA_SIZE];
 int profile_data_nitems = 0;
 int size = sizeof(profile) - sizeof(char*);
 
-void parse_line(char *line);
+int parse_line(char *line);
 void print_profile(int num);    //%P
 void find(char *word);          //%F
 void m_read(char *filename);      //%R
@@ -203,7 +204,7 @@ void cmd_sort(int num){
     sort(num);
 }
 
-void exec_command(char cmd, char *param){
+int exec_command(char cmd, char *param){
     int num;
 
     switch(cmd){
@@ -238,8 +239,12 @@ void exec_command(char cmd, char *param){
         else send_msg("Not enough arg: number of profiles to delete.\n");
         break;
     default:
-        fprintf(stderr, "No such command '%%%c'\n", cmd);
+      char msg[50]; 
+        sprintf(msg, "No such command '%%%c'\n", cmd);
+        send_msg(msg);
+        return 0;
     }
+  return 1;
 }
 
 /*------------------[create new profile data]--------------------*/
@@ -557,17 +562,20 @@ void delete_profile(int num){
 
 //-----------------[ parse_line() ]-------------------------
 
-void parse_line(char *line){
+int parse_line(char *line){
     
-    if(*line == '%'){
-      exec_command(line[1], &line[3]);
-      // printf("command!\n");
-    }
-    else{
-      new_profile(&profile_data_store[profile_data_nitems], line);
-    //   printf("registered! %d\n", profile_data_nitems);
+  if(*line == '%'){
+    return exec_command(line[1], &line[3]);
+    // printf("command!\n");
+  }
+  else{
+    if (new_profile(&profile_data_store[profile_data_nitems], line) == NULL) {
+      return 0;
+    } 
+  //   printf("registered! %d\n", profile_data_nitems);
 
-    }
+  }
+  return 1;
 }
 
 
@@ -730,7 +738,7 @@ int write_log(log_file *file, char *msg) {
 
 int make_tmp_log(log_file *c_lf) {
   log_file tmp_lf;
-  strcpy(tmp_lf.path, tmp_log_path);
+  strcpy(tmp_lf.path, tmp_csv_path);
   tmp_lf.fd = open(tmp_lf.path, O_WRONLY | O_TRUNC | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP);
 
   // ログファイル名の記入
@@ -754,7 +762,7 @@ int make_log_file(log_file *file, client_info *c_info) {
   char day_info[100];
   char net_info[100];
 
-  sprintf(day_info, "[TIME] %d/%d/%d %d:%d:%d", 
+  sprintf(day_info, "[TIME] %d/%02d/%02d %02d:%02d:%02d", 
           t->tm_year + 1900, t->tm_mon + 1, 
           t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
   sprintf(net_info, "[IP]   %s\n[PORT] %d", c_info->ip_addr, c_info->port);
@@ -773,11 +781,26 @@ int close_log_file(log_file *file) {
 
 void exit_handler(int singnal) {
   // m_write(tmp_csv_path);
-  close_log_file(&lf);
-  make_tmp_log(&lf);
 
-  send_signal(SIGNAL_SERVER_TERMINATE);
-  close(dst_sock);
+  if (pid > 0) {
+    printf("[EXIT] close listen socket fd: %d\n", s_sock);
+  }
+  else {
+    if (close_log_file(&lf) == 0) {
+      printf("[EXIT] close log fd: %d\n", lf.fd);
+    }
+    else {
+      printf("fail to close log file\n");
+    }
+    if (close(dst_sock) == 0) {
+      printf("[EXIT] close client socket fd: %d\n", dst_sock);
+    }
+    else {
+      printf("fail to close soclet fd\n");
+    }
+  }
+
+
   exit(1);
 }
 
@@ -785,11 +808,10 @@ void exit_handler(int singnal) {
 
 void comeback_routine() {
   log_file tmp_log;
-  strcpy(tmp_log.path, tmp_log_path);
+  strcpy(tmp_log.path, tmp_csv_path);
   tmp_log.fd = open(tmp_log.path, O_WRONLY);
 
   if (tmp_log.fd < 0) {
-    printf("not exist log.\n");
     send_signal(SIGNAL_END_MSG);
     return;
   }
@@ -837,14 +859,8 @@ int main(int argc, char *argv[]){
 
   while (finish_flag != 1) {
     dst_sock = make_client(&c_info);
-    if (make_log_file(&lf, &c_info) < 0) {
-      printf("fail to make log file\n");
-    }
 
-    printf("log file: %s\n", lf.path);
-    fprintf(stdout, "<connect> \tIP [%s] PORT [%d] SOCKET: [%d]\n", c_info.ip_addr, c_info.port, dst_sock);
-
-    int pid = fork();
+    pid = fork();
 
     if (pid < -1) {
       printf("fail to make process\n");
@@ -855,6 +871,10 @@ int main(int argc, char *argv[]){
       printf("make process pid: %d\n", pid);
     }
     else {
+      if (make_log_file(&lf, &c_info) < 0) {
+        printf("fail to make log file\n");
+      } 
+      fprintf(stdout, "<connect> \tIP [%s] PORT [%d] SOCKET: [%d]\n", c_info.ip_addr, c_info.port, dst_sock);
       delete_profile(profile_data_nitems);
       comeback_routine();
 
@@ -863,9 +883,11 @@ int main(int argc, char *argv[]){
       while (dst_connection) {
         if (recv_client(recv_buf, MAX_LINE_LEN) > 0) {
           // ログ追加 -> 処理
-          printf("msg: [%s] (pid :%d)\n", recv_buf, pid);
-          write_log(&lf, recv_buf);
-          parse_line(recv_buf);
+          printf("msg: [%s] #sockfd: %d\n", recv_buf, dst_sock);
+          strcpy(log_buf, recv_buf);
+          if (parse_line(recv_buf)) {
+            write_log(&lf, log_buf);
+          }
         }
         else {
           printf("client fault\n");
@@ -884,9 +906,9 @@ int main(int argc, char *argv[]){
               c_info.ip_addr, c_info.port, dst_sock);
 
       close_log_file(&lf);
+      close(dst_sock);
+      return 0;
     }
-
-    close(dst_sock);
   }
 
   close(s_sock);

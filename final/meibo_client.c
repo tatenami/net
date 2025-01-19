@@ -103,7 +103,8 @@ int main (int argc, char *argv[]) {
       }
 
       // サーバープログラムからの終了通知処理
-      if (str_contain(recv_buf, recv_size, SIGNAL_SERVER_TERMINATE) != -1) {
+      if (recv_size == 0) {
+      //if (str_contain(recv_buf, recv_size, SIGNAL_SERVER_TERMINATE) != -1) {
         stdout_msg("[ERROR] Server is terminated.\n");
         finish_flag = 1;
         break;

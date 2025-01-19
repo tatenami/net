@@ -169,7 +169,7 @@ TCPによる相互のデータ送受信を行う名簿管理プログラムの�
 ため，処理1--5を無限ループの処理の中に設けることで実現した．
 そのため，サーバプログラムの終了はキーボードのCtrl-C入力もしくは
 \verb|kill|コマンドで行う．
-Ctrl-C入力は本来強制的にプロセスを終了させるが，本プログラムは\ref{sec:sec1-ad1}
+Ctrl-C入力は本来強制的にプロセスを終了させるが，本プログラムは第\ref{sec:ad3-crtlc}
 項に示す様に安全に終了する機能を持つ．
 
 
@@ -183,6 +183,9 @@ Ctrl-C入力は本来強制的にプロセスを終了させるが，本プロ�
 接続要求の待ち受けを主に行う元のサーバプログラムを親プロセスとして
 TCPコネクションの確立の後にそれぞれのクライアントに対応した通信処理を行う
 プロセスを複製する方針により実装を行った．
+機能の確認のため，サーバは複製したプロセスのID及び
+メッセージのやり取りを行ったクライアントとの通信に使用している
+ソケットのディスクリプタの値を表示する．
 処理の概要については第\ref{sec:prog-server}節に示す．
 
 \subsubsection{サーバログ機能 (発展課題3)} \label{sec:ad3-log}
@@ -211,7 +214,7 @@ IPアドレス等の情報，アクセスした時刻やイベントを
 以降接続するクライアントにその一時データを読み込む選択ができる機能を実装した．
 
 一時的に記録したファイルがある場合は新たに接続したクライアントに
-メッセージを送信に，そのデータを読み込むがどうかを選択させ，
+メッセージを送信し，そのデータを読み込むがどうかを選択させ，
 選択された場合はファイルの内容を名簿データとして読み込んだ上で一時ファイルを削除する．
 選択されなかった場合はそのファイルを削除せず，データも読み込まない．
 
@@ -223,15 +226,13 @@ Ctrl-C入力により強制終了させる方法がある．
 クライアント用のソケットの削除，\ref{sec:ad3-log}項で示した
 ログファイルのファイルディスクリプタの削除など，
 本来プロセスを終了する前に行うべき処理が行われない．
-そのため，サーバプログラムではCtrl-C入力時にこれらの処理を行い安全に終了する
+そのため，サーバプログラムではCtrl-C入力時にこれらの処理を行い安全に終了し，
+正しくファイルやソケットのディスクリプタを削除したメッセージを標準出力へ標準する．
 機能を実装した．この機能では，上記の処理に
 状態のままになることを防ぐために
 Ctrl-C入力時にはプロセスにキーボードからの割り込みを示す
 シグナルが送信されるため，機能の実装にはプログラムで\verb|signal| システムコール
-を利用して，このシグナル発生時に上記の行うべき処理，
-加えてクライアントプログラムがサーバからの受信待ち状態のままになること
-を防ぐためのメッセージの送信を行い
-プロセスを終了する方針をとった．
+を利用して，このシグナル発生時に上記の行うべき処理を行う方針をとった．
 
 %--------------------------------------------------------------------%
 \section{プログラムの処理の説明}
@@ -297,6 +298,8 @@ Ctrl-C入力時にはプロセスにキーボードからの割り込みを示�
 \end{itemize}
 という処理の流れになり，複数のクライアントのプロセスからの接続要求を同時に処理する
 ことができる．
+また，サーバプログラムでは，クライアントとのコネクションを確立してプロセスを
+複製すると，親プロセスが子プロセスのプロセスIDを標準出力へ表示する．
 
 \subsubsection{クライアントプログラム}
 クライアントプログラムは始めに，
@@ -317,12 +320,9 @@ Ctrl-C入力時にはプロセスにキーボードからの割り込みを示�
 終了処理を待ち受け用ソケットを作成した後に設けている．
 プログラムでは\verb|signal|関数により，Ctrl-C入力時にプロセスに送信される\verb|SIGINT|
 シグナルを第1引数として，第2引数にプロセス終了前に行う処理をまとめた関数を渡す．
-この関数では，待ち受け用のソケットのディスクリプタとログファイルのディスクリプタの削除と，クライアント
-がサーバからのメッセージ受信待ち状態のままになることを防ぐための
-目印となるメッセージの送信を行う．
-このメッセージは1バイトで，名簿管理に関するメッセージで使用されないASCIIコードの整数値$127$(\verb|0x7f|)
-を代入している．
-
+この関数では，待ち受け用のソケットのディスクリプタとログファイルのディスクリプタの削除を行う．
+この時，子プロセスは削除したログファイルのディスクリプタとクライアント通信用ソケットディスクリプタの値を表示し，
+親プロセスはクライアントんも接続待ち受けに使用していたソケットのディスクリプタの値を表示する．
 \subsection{クライアントの標準入力からのデータ取得・サーバへのメッセージ送信} \label{sec:prog-client-send}
 標準入力からの入力データの受け取りとサーバへのメッセージの送信は
 同じ\verb|while|文中で行い，以下の流れで一連の処理を行う．
@@ -357,6 +357,9 @@ Ctrl-C入力時にはプロセスにキーボードからの割り込みを示�
 に受信のループ処理を抜ける．
 このメッセージ中の送信終了の目印により，クライアントの\verb|send|による送信回数に依らず，
 サーバはメッセージの受信を適切に終了を行う．
+
+また，多重通信受付対応の確認のため，メッセージを送信してきたクライアントとの
+通信に使用しているソケットのディスクリプタの値を表示する．
 
 \subsection{サーバの受信メッセージによる名簿データの処理・クライアントへのメッセージ送信}
 メッセージの受信後，メッセージ用バッファーに格納した文字列を解析して名簿管理に関する処理を行う．
@@ -399,26 +402,537 @@ Ctrl-C入力時にはプロセスにキーボードからの割り込みを示�
   \item[整数値$4$(\texttt{0x04})] \%Qコマンド入力判定による通信の接続終了を示し，
   サーバとのメッセージ送受信処理のループを抜け，ソケットを\verb|close|関数により削除してプロセスを終了する．
 \end{description}
-また，\verb|recv|関数による受信データの取得後は，メッセージ出力前に第\ref{sec:prog-ad3-original}節
-で解説したサーバ側のプロセス終了を示す目印としてメッセージに整数値$127$(\verb|0x7f|)
-が含まれているかどうかを確認し，あれば上記の\%Qコマンド入力判定時の接続終了と
+また，\verb|recv|関数による受信データの取得後は，\verb|recv|関数の戻り値が$0$であり，接続相手のサーバが通信していたソケットを閉じた場合は
+上記の\%Qコマンド入力判定時の接続終了と
 同じ処理を行う．
 
 %--------------------------------------------------------------------%
-\section{プログラムの使用方法と使用例}
+\section{プログラムの使用方法と使用例及び動作結果}
+本実験で作成したサーバ・クライアントのプログラムの，
+実際に使用する方法，使用例及びそれらの動作結果について
+以下の操作に関して示す．
 
-\subsection{他学生のサーバプログラムとの通信}
+\begin{itemize}
+  \item サーバ・クライアントプログラムの起動と通信の接続
+  \item 名簿管理に関するコマンドの実行
+  \item 他学生のサーバプログラムとの通信
+  \item サーバの多重通信受付対応
+  \item Ctrl-C入力でのサーバプロセスの安全な終了
+  \item Ctrl-C入力でのクライアント停止時の一時データ記録と復帰処理
+\end{itemize}
 
-\subsection{多重通信受付機能の使用}
+\subsection{サーバ・クライアントプログラムの実行と通信の接続}
+サーバプログラムでは，通信相手からの接続要求を受け付けるため，
+プロセスのポート番号を設定する必要がある．これはプログラム実行時
+に入力された引数を利用する．
+\begin{itemize}
+  \item 実行ファイル ポート番号
+\end{itemize}
 
+例としてポート番号を$60000$として
+待ち受ける際の使用例を以下に示す．サーバプログラムの実行ファイル名は
+\verb|meibo_server|としている．
+
+\begin{Verbatim}[numbers=none, numbersep=6pt, frame=single,
+                    fontsize=\small, baselinestretch=0.8]
+$ ./meibo_server 60000
+\end{Verbatim}
+これにより，引数で与えたポート番号でクライアントの接続を受け付ける状態となる．
+
+クライアントプログラムでは，サーバとの接続のために，サーバの
+ホスト名とポート番号を設定する必要がある．これもサーバプログラム
+と同様にプログラム実行時の引数として与え，第1引数がホスト名(IPアドレスまたはドメイン名)，
+第2引数がポート番号となっている．
+\begin{itemize}
+  \item 実行ファイル ホスト名 ポート番号
+\end{itemize}
+同一計算機上で上記の例で示したサーバが動作している場合のクライアントの使用例を以下に示す．
+クライアントの実行ファイル名は\verb|meibo_client|としている．
+
+\begin{Verbatim}[numbers=none, numbersep=6pt, frame=single,
+  fontsize=\small, baselinestretch=0.8]
+$ ./meibo_client localhost 60000
+[ Server Info ] IP Address: [ 127.0.0.1 ] - Port: [ 60000 ]
+\end{Verbatim}
+プログラム実行後，プロセスが終了しない状態であればサーバとの接続
+が完了し，名簿管理に関する処理が行えるようになる．
+
+\subsection{名簿管理に関するコマンドの実行}
+以下，サーバと接続後のクライアントプログラムでの各コマンドを実行した際の
+動作例を示す．サーバは前節の例と同様に同一計算機上でポート番号60000
+で接続要求を待ち受けているものとする．
+
+\subsubsection{\%Q コマンド}
+以下，サーバへの接続直後に\%Qコマンドを実行した際の動作例を示す．
+
+\begin{Verbatim}[numbers=none, numbersep=6pt, frame=single,
+  fontsize=\small, baselinestretch=0.8]
+$ ./meibo_client localhost 60000
+[ Server Info ] IP Address: [ 127.0.0.1 ] - Port: [ 60000 ]
+%Q
+See you!
+\end{Verbatim}
+コマンド実行後．\verb|See you!|のメッセージが表示され，プロセスが終了する．
+
+\subsubsection{\%C，R，P コマンド}
+以下，\%C，R，Pコマンドを使用した際の動作例を示す．
+機能の動作を確認する上で名簿データが必要であったため，そのデータ
+として実験で配布された\verb|sample.csv|ファイルを使用している．
+このファイルには2886データが記録されている．
+コマンド操作は以下の順で行った．
+\begin{enumerate}
+  \item \%C
+  \item \%P (全データ表示)
+  \item \%R (\verb|sample.csv|の読み込み)
+  \item \%C
+  \item \%P (先頭から3データ)
+\end{enumerate}
+\begin{Verbatim}[numbers=none, numbersep=6pt, frame=single,
+  fontsize=\small, baselinestretch=0.8]
+%C
+0 profile(s)
+Enable to add 10000 data(s)
+%P 0
+%R sample.csv
+%C
+2886 profile(s)
+Enable to add 7114 data(s)
+%P 3
+Id    : 5100046
+Name  : The Bridge
+Birth : 1845-11-02
+Addr. : 14 Seafield Road Longman Inverness
+Comm. : SEN Unit 2.0 Open
+
+Id    : 5100127
+Name  : Bower Primary School
+Birth : 1908-01-19
+Addr. : Bowermadden Bower Caithness
+Comm. : 01955 641225 Primary 25 2.6 Open
+
+Id    : 5100224
+Name  : Canisbay Primary School
+Birth : 1928-07-05
+Addr. : Canisbay Wick
+Comm. : 01955 611337 Primary 56 3.5 Open  
+\end{Verbatim}
+\%Rコマンドによるデータの読み込みにより，\%Cコマンドで表示される
+データ数がファイルに登録されていた数になり，\%Pコマンドでも
+指定した数だけ名簿データの表示がされた．
+
+\subsubsection{\%W コマンド}
+\%Wコマンドによる登録データのファイルへの書き出しの
+動作例を示す．
+動作確認のため，\%Wコマンドも含めて以下の操作を順に行った．
+\begin{enumerate}
+  \item 適当な名簿データを3つ登録する
+  \item \%Cコマンドでデータ数を確認する
+  \item \%Wコマンドで\verb|copy.csv|という名前のファイルにデータを書き出す．
+\end{enumerate}
+
+\begin{Verbatim}[numbers=none, numbersep=6pt, frame=single,
+  fontsize=\small, baselinestretch=0.8]
+100,takahashi,2001-1-1,tokyo,no comment.
+200,suzuki,2002-2-2,osaka,no comment.
+300,honda,2003-3-3,kyoto,no comment.
+%C
+3 profile(s)
+Enable to add 9997 data(s)
+%W copy.csv  
+\end{Verbatim}
+実行後の\verb|copy.csv|の内容を以下に示す．コマンド実行時点で登録していた
+名簿データが記録されている．
+\begin{Verbatim}[numbers=left, numbersep=6pt, frame=single, xleftmargin=10mm,
+  fontsize=\small, baselinestretch=0.8]
+100,takahashi,2001-1-1,tokyo,no comment.
+200,suzuki,2002-2-2,osaka,no comment.
+300,honda,2003-3-3,kyoto,no comment.
+\end{Verbatim}
+
+\subsubsection{\%S コマンド}
+前項で登録した3つの名簿データがある状態で\%Sコマンドにより
+データをソートした際の実行結果を示す．
+操作は以下の順で行った．
+\begin{enumerate}
+  \item \%Pコマンドで全データを表示する
+  \item \%Sコマンドで名前(第2項目)についてソートする
+  \item \%Pコマンドで全データを表示する
+\end{enumerate}
+
+\begin{Verbatim}[numbers=none, numbersep=6pt, frame=single,
+  fontsize=\small, baselinestretch=0.8]
+%P 0
+Id    : 100
+Name  : takahashi
+Birth : 2001-01-01
+Addr. : tokyo
+Comm. : no comment.
+
+Id    : 200
+Name  : suzuki
+Birth : 2002-02-02
+Addr. : osaka
+Comm. : no comment.
+
+Id    : 300
+Name  : honda
+Birth : 2003-03-03
+Addr. : kyoto
+Comm. : no comment.
+
+%S 2
+%P 0
+Id    : 300
+Name  : honda
+Birth : 2003-03-03
+Addr. : kyoto
+Comm. : no comment.
+
+Id    : 200
+Name  : suzuki
+Birth : 2002-02-02
+Addr. : osaka
+Comm. : no comment.
+
+Id    : 100
+Name  : takahashi
+Birth : 2001-01-01
+Addr. : tokyo
+Comm. : no comment.  
+\end{Verbatim}
+名前の項目でアルファベット順にソートされたことが確認できる．
+
+\subsubsection{\%F コマンド}
+\%W，\%Sコマンドの動作例で使用した3つの名簿データが登録された状態で\%Fコマンドにより
+引数で指定した文字列と一致する項目でを持つ名簿データの検索を行った実行結果を示す．
+操作は以下の順で行った．
+\begin{enumerate}
+  \item 「\verb|100|」に一致する項目を持つデータを検索する
+  \item 「\verb|no comment.|」に一致する項目を持つデータを検索する
+\end{enumerate}
+
+\begin{Verbatim}[numbers=none, numbersep=6pt, frame=single,
+  fontsize=\small, baselinestretch=0.8]
+%F 100
+[No.3]
+Id    : 100
+Name  : takahashi
+Birth : 2001-01-01
+Addr. : tokyo
+Comm. : no comment.
+
+%F no comment.
+[No.1]
+Id    : 300
+Name  : honda
+Birth : 2003-03-03
+Addr. : kyoto
+Comm. : no comment.
+
+[No.2]
+Id    : 200
+Name  : suzuki
+Birth : 2002-02-02
+Addr. : osaka
+Comm. : no comment.
+
+[No.3]
+Id    : 100
+Name  : takahashi
+Birth : 2001-01-01
+Addr. : tokyo
+Comm. : no comment.  
+\end{Verbatim}
+
+\subsubsection{\%D コマンド}
+\%Dコマンドによる登録データ削除機能の
+動作例を示す．
+動作確認のため，他のコマンドも含めて以下の操作を順に行った．
+\begin{enumerate}
+  \item \%Rコマンドで\verb|sample.csv|ファイルのデータを読み込む(2886データ)
+  \item \%Cコマンドで登録データ数を確認する
+  \item \%Dコマンドで先頭から2880データを削除
+  \item \%Cコマンドで登録データ数を確認する
+\end{enumerate}
+
+\begin{Verbatim}[numbers=none, numbersep=6pt, frame=single,
+  fontsize=\small, baselinestretch=0.8]
+%R sample.csv
+%C
+2886 profile(s)
+Enable to add 7114 data(s)
+%D 2880
+%C
+6 profile(s)
+Enable to add 9994 data(s)  
+\end{Verbatim}
+
+\subsection{他学生のサーバプログラムとの通信 (発展課題1)}
+作成したクライアントプログラムを他学生の作成したサーバプログラム
+に接続する際の使用例を以下に示す．
+
+サーバプログラムは学生番号：09B22509，氏名：垣本桃弥さん
+が作成したものを使用した．
+
+動作確認に関する操作は以下の順で行った．
+\begin{enumerate}
+  \item 相手方のサーバプロセスが動作している計算機のIPアドレス，ポート番号を引数としてクライアントプログラムを実行する
+  \item \%Cコマンドでデータ数を確認する
+  \item \%Rコマンドで\verb|sample.csv|ファイルのデータを読み込む(ファイルはサーバ側のものが対象)
+  \item \%Cコマンドでデータ数を確認する
+  \item \%Pコマンドで先頭から3データを表示する
+  \item \%Qコマンドでサーバとの通信を終了，クライアントプログラムを終了する
+\end{enumerate}
+
+\begin{Verbatim}[numbers=none, numbersep=6pt, frame=single,
+  fontsize=\small, baselinestretch=0.8]
+$ ./meibo_client 61003
+%C
+0 profile(s)
+%R sample.csv
+%C
+2886 profile(s)
+%P 3
+Id    : 5100046
+Name  : The Bridge
+Birth : 1845-11-02
+Addr. : 14 Seafield Road Longman Inverness
+Comm. : SEN Unit 2.0 Open
+
+Id    : 5100127
+Name  : Bower Primary School
+Birth : 1908-01-19
+Addr. : Bowermadden Bower Caithness
+Comm. : 01955 641225 Primary 25 2.6 Open
+
+Id    : 5100224
+Name  : Canisbay Primary School
+Birth : 1928-07-05
+Addr. : Canisbay Wick
+Comm. : 01955 611337 Primary 56 3.5 Open
+
+%Q
+$
+\end{Verbatim}
+
+\subsection{サーバログ機能 (発展課題3)}
+サーバログ機能は，接続したクライアントそれぞれのログファイルを作成する．
+ログファイルには
+\begin{itemize}
+  \item IPアドレス
+  \item ポート番号
+  \item 接続した時刻
+  \item 実行したコマンド・入力により登録した名簿データ
+\end{itemize}
+を記入する．
+ログファイル名は接続時の時刻に基づき，
+\verb|年-月-日_時-分-秒.log|となる．
+以下，クライアントが接続し，以下の操作を行った際のサーバプロセスの出力と
+作成されたログファイルの記録について示す．
+\begin{enumerate}
+  \item \%Cコマンドの実行
+  \item 無効なコマンドの入力
+  \item 新たな名簿データの入力
+  \item \%Pコマンドで全データを表示
+  \item \%Rコマンドによる\verb|sample.csv|の読み込み
+  \item \%Qコマンドによる接続の終了
+\end{enumerate}
+
+\paragraph*{サーバプロセスの出力}
+\begin{Verbatim}[numbers=none, numbersep=6pt, frame=single,
+  fontsize=\small, baselinestretch=0.8]
+$ ./meibo_server 60000
+log file: log/2025-01-19_16-32-49.log
+<connect> 	IP [127.0.0.1] PORT [54344] SOCKET: [4]
+make process pid: 36692
+msg: [%C] #sockfd: 4
+msg: [%A] #sockfd: 4
+msg: [100,takahashi,2001-1-1,toyko,no comment.] #sockfd: 4
+msg: [%P 0] #sockfd: 4
+msg: [%R sample.csv] #sockfd: 4
+msg: [%Q] #sockfd: 4
+<disconnect> 	IP [127.0.0.1] PORT [54344] SOCKET: [4]
+\end{Verbatim}
+
+\paragraph*{ログファイルの内容}
+\begin{Verbatim}[numbers=left, numbersep=6pt, frame=single, xleftmargin=10mm,
+  fontsize=\small, baselinestretch=0.8]
+[TIME] 2025/01/19 16:32:49
+[IP]   127.0.0.1
+[PORT] 54344
+%C
+100,takahashi,2001-1-1,toyko,no comment.
+%P 0
+%R sample.csv
+%Q
+\end{Verbatim}
+仕様の通り，有効なコマンドと新たに登録した名簿データが記録されていることが確認できた．
+
+
+\subsection{Ctrl-C入力でのサーバプロセスの安全な終了 (発展課題3)}
+サーバプロセスが実行時にCtrl-C入力された際，サーバは通信に使用していたソケットと
+ログファイルのディスクリプタを\verb|close|関数で削除を行い，その値を表示する．
+
+以下，1つのクライアントプログラムが接続されている状態でサーバプロセスをCtrl-Cで終了させた際の
+サーバ及びクライアントの出力結果を示す．クライアントがサーバプログラムの終了をメッセージの受信により
+判別するため，一度何かしらの入力を行いメッセージ送信処理を終える必要があるため，コマンドを入力している．
+
+\paragraph*{サーバプロセスの出力}
+\begin{Verbatim}[numbers=none, numbersep=6pt, frame=single,
+  fontsize=\small, baselinestretch=0.8]
+$ ./meibo_server 60000
+make process pid: 45549
+<connect> 	IP [127.0.0.1] PORT [58376] SOCKET: [4]
+^C[EXIT] close log fd: 5
+[EXIT] close listen socket fd: 3
+[EXIT] close client socket fd: 4
+\end{Verbatim}
+
+\paragraph*{クライアントプロセスの出力}
+\begin{Verbatim}[numbers=none, numbersep=6pt, frame=single,
+  fontsize=\small, baselinestretch=0.8]
+$ ./meibo_client localhost 60000
+[ Server Info ] IP Address: [ 127.0.0.1 ] - Port: [ 60000 ]
+%C
+[ERROR] Server is terminated.
+$
+\end{Verbatim}
+サーバ側では
+\begin{itemize}
+  \item クライアントの接続待ち受け用のソケットのディスクリプタ
+  \item クライアントとの通信用ソケットのディスクリプタ
+  \item クライアントのログファイルのディスクリプタ
+\end{itemize}
+が閉じられた出力が，クライアント側では
+サーバ側のプロセスが終了したことを示すメッセージが出力されて
+プロセスが終了することが確認できた．
+
+\subsection{Ctrl-C入力でのクライアント停止時の一時データ記録と復帰処理 (発展課題3)}
+第\ref{sec:ad3-original}項で示した，クライアントプログラム停止時の
+一時的なデータの記録と，そのデータの以降のクライアント接続時の復元について，
+サーバに対して1つのクライアントプログラムで接続し，
+以下に示す操作で動作を確認した．この動作確認時点では一時記録ファイルは
+無い状態である．
+\begin{enumerate}
+  \item \%Rコマンドで\verb|sample.csv|の2886個のデータを読み込む
+  \item \%Dコマンドで2880個のデータを削除，6個のデータを残す
+  \item \%Cコマンドでデータ数を確認する
+  \item Ctrl-C入力でクライアントのプロセスを終了させる
+  \item 再度クライアントプログラムを実行
+  \item 直前のデータを復元し読み込むことを選択する
+  \item \%Cコマンドでデータ数を確認する
+\end{enumerate}
+
+操作を行った際のクライアントプログラムの出力を示す．
+\begin{Verbatim}[numbers=none, numbersep=6pt, frame=single,
+  fontsize=\small, baselinestretch=0.8]
+$ ./meibo_client localhost 60000
+[ Server Info ] IP Address: [ 127.0.0.1 ] - Port: [ 60000 ]
+%R sample.csv
+%D 2880
+%C
+6 profile(s)
+Enable to add 9994 data(s)
+^C
+$ ./meibo_client localhost 60000
+[ Server Info ] IP Address: [ 127.0.0.1 ] - Port: [ 60000 ]
+Return to the state before error exit ? [y/n] y
+%C
+6 profile(s)
+Enable to add 9994 data(s)
+\end{Verbatim}
+仕様の通り，クライアントがCtrl-Cで終了した際に，その時点の名簿データが記録され，
+以降接続した際に復元するかどうかの選択処理が行われ，データが正しく読み込まれたことが確認できる．
 %--------------------------------------------------------------------%
 \section{プログラムの作成過程に関する考察}
+今回のプログラムにおいて重要な機能であるメッセージの送受信とその同期処理の
+実装にあたり，サーバ・クライアントプログラムのどちらも
+ユーザからの入力や処理結果によって長さが大きいメッセージを扱う
+ことを考慮して，バッファーサイズや処理回数の修正が発生すると考えられる
+必要な送受信回数を共有するという方法ではなく，メッセージに処理の終了を
+示す目印を加える実装にしたことで，それぞれのプログラムでの送受信に関する処理
+の構成が共通化でき，結果として修正や変更が容易になった．
+加えて，この送受信処理を関数を利用しまとまった構造にすることで，
+基になっている名簿管理プログラムのコードの変更を少なくし，
+基本的な仕様が実装しやすく，機能を実装を進めていく上でバグの特定が行い易くなる
+よう工夫を行った．
 
+また，送受信終了の処理も必ず目印となるメッセージを受け取り，
+その目印により処理を進めるという仕組みにしてプログラム全体を構成したことで，
+\%Qコマンドによるプロセスの終了とメッセージの
+受信終了の処理や拡張機能の実装と修正が容易になった．
+
+以上の様に通信処理やそれに関するプログラムの流れに自分なりのルールを決めて作業を進めることで
+実装と拡張の負担は下がったが，
+それ以外の，特に元の名簿管理プログラムを変更しないことや
+その通信関連の部分の処理をより簡単な関数の形にすることを意識しすぎた
+結果，通信に関わる関数などでプログラム全体で共通で使用するソケットなどの
+変数の多くをグローバル変数に変更してしまい，実装が進みコードが増えるに伴って
+それに関わる関数の処理や変数名の扱いに関する修正が難しくなってしまったことに
+苦労した．
+そのため，今回の様に予め実装箇所が多いプログラムを基にした拡張や改良
+については，既存のコードの修正をしないことを意識し過ぎることをせず，
+実装したい機能の構成をある程度固めた上で，それに合わせて適度に
+修正を加えることが必要であると考えられる．
+また，今回の通信に使用するソケットディスクリプタやメッセージのバッファーなどの
+プログラム全体的で必要となる変数を扱う関数の実装も，グローバル変数の増加
+や複雑化を避けるためにも，これら変数を関連させた構造体として扱い関数やプログラムを考えることも
+上記の苦労点の1つの解決のアプローチと言える．
+
+また，通信関連の処理では特にデータの受信と
+そのデータに対する処理によるエラーが多く発生したため，
+\verb|recv|関数の戻り値を用いたエラーのチェックと
+本来文字として出力されないメッセージの終了に使用している目印を走査して
+表示・可視化させる処理によるデータ送受信の確認を行い，
+加えて受信に使用したデータのバッファーを
+そのまま次の処理に利用するのではなく，一度別のバッファーにコピーして
+それ以降の名簿管理や通信処理の後のデータを比較・表示できるようにして，
+\verb|Segmentation Fault|のようなメッセージ操作に関連したエラーが
+どこで発生したものなのかを\verb|printf|による出力やgdbによるデバッグ
+で特定しやすいよう工夫を施した．
+
+\subsection{他学生のサーバプログラムとの通信におけるメッセージ仕様の工夫}
+今回使用させた頂いた他学生のサーバプログラムは，自身で作成した
+サーバプログラムと同様に繰り返し処理の中でデータの送受信処理を繰り返し，
+メッセージの最後に終了を示す目印を加えることで，メッセージの送受信と
+その同期を行う仕様であった．その目印はNULL文字(\verb|'\0'|)であり，
+自身のクライアントプログラムでは他の値を利用していた箇所を
+このNULL文字に変更することで正しくメッセージのやり取りができるように
+目印の修正を行った．また，\%Qコマンドによるクライアントプログラムの終了について，
+自身の仕様ではサーバからのメッセージの末尾の値に応じて終了するかどうかを
+分岐させていたが，相手方のサーバプログラムではNULL文字のみのデータをサーバに
+送信する仕様であったため，ユーザからの入力メッセージで\%Qコマンドである場合に
+クライアント側のプロセスを終了できるように処理を加えた．
+
+\subsection{サーバの多重通信受付対応の機能の確認 (発展課題2)}
+今回実装するしたサーバの多重通信受付対応の機能は，クライアントとのコネクションの
+確立後，\verb|fork|関数によるプロセスの複製を行う．
+そのため，サーバプログラムの実行後，
+複数のターミナルからクライアントプログラムを
+起動し，サーバへ接続した際のサーバ側の複製したプロセスIDやソケットに関する出力と
+\verb|ps|コマンドによる実行プロセスの情報により確認を行った．
+\verb|ps|コマンドでは，パイプで\verb|grep|コマンドを繋ぎ，
+名簿管理プログラムのサーバ・クライアントのプロセスを調べ
+，サーバは接続要求待ち受りを行っている親プロセスを除いて
+サーバプロセスの数がクライアントプロセスの数と同じになるか，
+そしてサーバプログラムで出力される複製時のプロセスIDと一致しているかどうかで
+多重通信の受付ができているかをテストした．
 
 %--------------------------------------------------------------------%
 \section{得られた結果に関する考察}
-
-
+今回，クライアントプログラムにおいて，標準入力からの
+入力データの取得とメッセージの標準出力への出力は
+文字列操作に関する標準ライブラリ関数でなく，\verb|open|関数，
+\verb|write|関数をそれぞれ利用した．
+これにより文字列の終端文字もデータとして扱われ，入力データを
+まとまった文字列という単位で処理が複雑になり，
+元の名簿管理プログラムで動作確認で行えていたファイルのリダイレクションによる
+コマンドの処理ができなくなっていた．そのため，動作確認や
+実際にユーザが使用する際の利便性も考えて，
+これらシステムコール関数で取得したデータ中で文字列の区切れとなる
+改行文字や終端文字を起点として，データを文字列単位で分割して配列やリストで
+まとめて管理できる処理を可能にすることで，より名簿管理に関する操作が
+改善され，さらなる機能の拡張に繋がると考えられる．
 %--------------------------------------------------------------------%
 
 % Verbatim environment

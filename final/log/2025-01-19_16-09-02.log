@@ -1,0 +1,8 @@
+[TIME] 2025/1/19 16:9:2
+[IP]   127.0.0.1
+[PORT] 37036
+%C
+100,takahashi,2001-1-1,tokyo,no comment.
+%P 0
+%R sample.csv
+%Q
